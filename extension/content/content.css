@@ -48,6 +48,20 @@
   background: #014486;
   width: 24px;
 }
+/* Slim restore control after Hide — always keeps on-page access */
+.orgkit-restore-tab {
+  background: #1c3552;
+  border-color: rgba(143, 166, 193, 0.55);
+  width: 20px;
+  padding: 10px 0;
+  opacity: 0.92;
+}
+.orgkit-restore-tab:hover {
+  background: #0176d3;
+  border-color: rgba(1, 118, 211, 0.55);
+  width: 22px;
+  opacity: 1;
+}
 
 .orgkit-side-panel {
   position: fixed;

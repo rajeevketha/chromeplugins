@@ -21,8 +21,10 @@
   const state = {
     showLauncher: true,
     showBadge: true,
+    minimized: false,
     launcher: null,
     panel: null,
+    restoreTab: null,
     badge: null,
     open: false
   };
@@ -30,9 +32,14 @@
   init();
 
   async function init() {
-    const settings = await chrome.storage.sync.get({ showToolbar: true, showBadge: true });
+    const settings = await chrome.storage.sync.get({
+      showToolbar: true,
+      showBadge: true,
+      launcherMinimized: false
+    });
     state.showLauncher = settings.showToolbar !== false;
     state.showBadge = settings.showBadge !== false;
+    state.minimized = settings.launcherMinimized === true;
 
     if (state.showBadge) mountBadge();
     if (state.showLauncher) mountLauncher();
@@ -43,15 +50,14 @@
         state.showBadge = changes.showBadge.newValue !== false;
         state.showBadge ? mountBadge() : state.badge?.remove();
       }
+      if (changes.launcherMinimized) {
+        state.minimized = changes.launcherMinimized.newValue === true;
+        if (state.showLauncher) mountLauncher();
+      }
       if (changes.showToolbar) {
         state.showLauncher = changes.showToolbar.newValue !== false;
         if (state.showLauncher) mountLauncher();
-        else {
-          state.launcher?.remove();
-          state.panel?.remove();
-          state.launcher = null;
-          state.panel = null;
-        }
+        else clearLauncher();
       }
     });
 
@@ -86,17 +92,33 @@
     state.badge = el;
   }
 
-  /** Compact right-edge tab (Inspector-style), not a wide bottom bar. */
-  function mountLauncher() {
+  function clearLauncher() {
     state.launcher?.remove();
     state.panel?.remove();
+    state.restoreTab?.remove();
+    state.launcher = null;
+    state.panel = null;
+    state.restoreTab = null;
+    state.open = false;
+  }
+
+  /** Compact right-edge tab (Inspector-style), or a slim Show control when minimized. */
+  function mountLauncher() {
+    clearLauncher();
+    if (!state.showLauncher) return;
+
+    if (state.minimized) {
+      mountRestoreTab();
+      return;
+    }
 
     const tab = document.createElement("button");
     tab.type = "button";
     tab.id = "orgkit-side-tab";
     tab.className = "orgkit-side-tab";
-    tab.title = "OrgKit";
-    tab.setAttribute("aria-label", "Open OrgKit menu");
+    tab.title = "OrgKit quick links";
+    tab.setAttribute("aria-label", "Open OrgKit quick links");
+    tab.setAttribute("aria-expanded", "false");
     tab.innerHTML = `<span>OrgKit</span>`;
     tab.addEventListener("click", () => togglePanel());
 
@@ -111,7 +133,7 @@
       <button type="button" data-action="logs">Logs</button>
       <button type="button" data-action="flows">Flows</button>
       <button type="button" data-action="console">Console</button>
-      <button type="button" data-action="hide" class="orgkit-muted">Hide tab</button>
+      <button type="button" data-action="minimize" class="orgkit-muted">Hide</button>
     `;
     panel.addEventListener("click", onPanelClick);
 
@@ -122,10 +144,38 @@
     state.open = false;
   }
 
+  function mountRestoreTab() {
+    state.restoreTab?.remove();
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.id = "orgkit-restore-tab";
+    tab.className = "orgkit-side-tab orgkit-restore-tab";
+    tab.title = "Show OrgKit quick links";
+    tab.setAttribute("aria-label", "Show OrgKit quick links");
+    tab.innerHTML = `<span>Show</span>`;
+    tab.addEventListener("click", () => setMinimized(false));
+    document.documentElement.appendChild(tab);
+    state.restoreTab = tab;
+  }
+
+  async function setMinimized(minimized) {
+    state.minimized = !!minimized;
+    state.open = false;
+    try {
+      await chrome.storage.sync.set({ launcherMinimized: state.minimized });
+    } catch {
+      // Still update the page even if storage write fails.
+    }
+    mountLauncher();
+  }
+
   function togglePanel(force) {
     state.open = typeof force === "boolean" ? force : !state.open;
     if (state.panel) state.panel.hidden = !state.open;
-    if (state.launcher) state.launcher.classList.toggle("is-open", state.open);
+    if (state.launcher) {
+      state.launcher.classList.toggle("is-open", state.open);
+      state.launcher.setAttribute("aria-expanded", state.open ? "true" : "false");
+    }
   }
 
   function lightningBase() {
@@ -164,10 +214,8 @@
       console: `${apiBase()}/_ui/common/apex/debug/ApexCSIPage`
     };
 
-    if (action === "hide") {
-      await chrome.storage.sync.set({ showToolbar: false });
-      state.launcher?.remove();
-      state.panel?.remove();
+    if (action === "minimize") {
+      await setMinimized(true);
       return;
     }
     if (action === "orgkit") {

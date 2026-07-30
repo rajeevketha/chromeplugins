@@ -15,16 +15,25 @@ import {
   INACTIVE_FLOW_STATUSES
 } from "../lib/flow-cleaner.js";
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   chrome.storage.sync.get(
     {
       favorites: [],
       apiVersion: DEFAULT_API_VERSION,
       showToolbar: true,
       showBadge: true,
+      launcherMinimized: false,
       deployChecklist: []
     },
-    (data) => chrome.storage.sync.set(data)
+    (data) => {
+      // Older "Hide tab" turned the launcher fully off (showToolbar=false) with no on-page restore.
+      // On upgrade, bring it back as minimized so a Show control remains on the page.
+      if (details.reason === "update" && data.showToolbar === false) {
+        data.showToolbar = true;
+        data.launcherMinimized = true;
+      }
+      chrome.storage.sync.set(data);
+    }
   );
 });
 
@@ -76,7 +85,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
     fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.6.4",
+      version: "1.6.5",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       hasExecuteAnonymous: typeof executeAnonymous === "function",

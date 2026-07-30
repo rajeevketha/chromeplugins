@@ -55,8 +55,11 @@ html.shell-wide {
   width: 100% !important;
   height: 100% !important;
 }
+html.shell-wide,
 html.shell-wide body {
   min-height: 100vh;
+}
+html.shell-wide body {
   height: auto;
   overflow: auto;
 }
@@ -78,6 +81,23 @@ html.shell-wide .describe-list,
 html.shell-wide .package-members,
 html.shell-wide .link-list {
   max-height: min(55vh, 520px);
+}
+
+/* Fallback when CSS alone can see a wide viewport (full tab). */
+@media (min-width: 820px) {
+  html {
+    width: 100%;
+    height: auto;
+    min-height: 100%;
+  }
+  body {
+    min-height: 100vh;
+    height: auto;
+    overflow: auto;
+  }
+  .feature-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
 }
 
 .header {

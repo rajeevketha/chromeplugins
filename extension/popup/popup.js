@@ -104,8 +104,10 @@ const $ = (sel) => document.querySelector(sel);
 init();
 
 async function init() {
-  applyShellMode();
-  window.addEventListener("resize", applyShellMode);
+  await applyShellMode();
+  window.addEventListener("resize", () => {
+    applyShellMode();
+  });
   renderFeatureGrid();
   bindNav();
   bindFeatureActions();
@@ -119,6 +121,21 @@ async function init() {
   await loadDeployChecklist();
   await refreshOrg();
   showView("home");
+}
+
+/**
+ * Action popups stay compact; opening popup.html as a Chrome tab fills the window.
+ */
+async function applyShellMode() {
+  let asTab = false;
+  try {
+    const tab = await chrome.tabs.getCurrent();
+    asTab = Boolean(tab?.id);
+  } catch {
+    asTab = false;
+  }
+  const wide = asTab || window.innerWidth >= 820 || window.matchMedia("(min-width: 820px)").matches;
+  document.documentElement.classList.toggle("shell-wide", wide);
 }
 
 function renderFeatureGrid() {

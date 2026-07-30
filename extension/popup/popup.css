@@ -664,6 +664,55 @@ html.shell-wide .link-list {
   padding: 5px 8px;
   font-size: 11.5px;
 }
+.label.tight {
+  margin: 0;
+  white-space: nowrap;
+}
+.soql-editor {
+  position: relative;
+}
+.soql-suggest {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% - 2px);
+  z-index: 40;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+.soql-suggest.hidden { display: none; }
+.soql-suggest-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid rgba(42, 74, 107, 0.4);
+  background: transparent;
+  color: var(--text);
+  padding: 8px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+.soql-suggest-item:last-child { border-bottom: 0; }
+.soql-suggest-item:hover,
+.soql-suggest-item.active {
+  background: rgba(56, 132, 255, 0.16);
+}
+.soql-suggest-item strong {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 650;
+}
+.soql-suggest-item span {
+  color: var(--muted);
+  font-size: 11px;
+}
 .inline-pre {
   margin: 6px 0 0;
   white-space: pre-wrap;

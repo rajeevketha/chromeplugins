@@ -232,8 +232,32 @@
 
   <!-- UTIL: SOQL runner + saved library -->
   <section id="view-soql-run" class="view">
+    <div class="row wrap" style="margin-bottom:8px">
+      <label class="label tight" for="soqlApiMode">API</label>
+      <select id="soqlApiMode" class="select" title="Standard data objects or Tooling API metadata objects">
+        <option value="rest">Standard objects</option>
+        <option value="tooling">Tooling API</option>
+      </select>
+      <input
+        type="search"
+        id="soqlObjectHint"
+        class="input grow"
+        list="soqlObjectList"
+        placeholder="Object API name (Account, ApexClass…)"
+        autocomplete="off"
+      />
+      <datalist id="soqlObjectList"></datalist>
+      <button type="button" class="btn" id="soqlLoadFields" title="Load fields for autocomplete">Load fields</button>
+    </div>
+    <p class="hint" id="soqlAssistHint">
+      Type in SELECT to autocomplete field API names. Choosing a field inserts <code>FieldName,</code> so you can keep adding.
+      Switch to Tooling API for ApexClass, Flow, CustomObject, etc.
+    </p>
     <label class="label" for="soqlInput">SOQL</label>
-    <textarea id="soqlInput" class="textarea" rows="5" placeholder="SELECT Id, Name FROM Account LIMIT 10"></textarea>
+    <div class="soql-editor">
+      <textarea id="soqlInput" class="textarea" rows="5" placeholder="SELECT Id, Name FROM Account LIMIT 10" spellcheck="false"></textarea>
+      <div id="soqlSuggest" class="soql-suggest hidden" role="listbox" aria-label="Field suggestions"></div>
+    </div>
     <div class="row wrap">
       <select id="apiVersion" class="select" title="API version"></select>
       <button type="button" class="btn primary" id="runSoql">Run query</button>

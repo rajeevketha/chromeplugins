@@ -32,10 +32,11 @@ function sortLibrary(rows) {
   });
 }
 
-export async function saveSoqlEntry(orgKey, { id, name, soql, pinned } = {}) {
+export async function saveSoqlEntry(orgKey, { id, name, soql, pinned, apiMode } = {}) {
   const key = normalizeOrgKey(orgKey);
   const cleanName = String(name || "").trim().slice(0, MAX_NAME);
   const cleanSoql = String(soql || "").trim();
+  const mode = apiMode === "tooling" ? "tooling" : "rest";
   if (!cleanName) throw new Error("Enter a name for this query.");
   if (!cleanSoql) throw new Error("SOQL is empty.");
   if (cleanSoql.length > MAX_SOQL) throw new Error(`SOQL exceeds ${MAX_SOQL} characters.`);
@@ -51,6 +52,7 @@ export async function saveSoqlEntry(orgKey, { id, name, soql, pinned } = {}) {
       ...rows[existingIdx],
       name: cleanName,
       soql: cleanSoql,
+      apiMode: mode,
       pinned: pinned == null ? Boolean(rows[existingIdx].pinned) : Boolean(pinned),
       updatedAt: now
     };
@@ -59,6 +61,7 @@ export async function saveSoqlEntry(orgKey, { id, name, soql, pinned } = {}) {
       id: newId(),
       name: cleanName,
       soql: cleanSoql,
+      apiMode: mode,
       pinned: Boolean(pinned),
       createdAt: now,
       updatedAt: now

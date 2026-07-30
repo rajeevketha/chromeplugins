@@ -39,8 +39,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     runSoql: () => runSoql(message.tabUrl, message.query, message.apiVersion),
     toolingQuery: () => toolingQuery(message.tabUrl, message.query, message.apiVersion),
     restGet: () => restGet(message.tabUrl, message.path, message.apiVersion),
-    describeGlobal: () => describeGlobal(message.tabUrl, message.apiVersion),
-    describeSObject: () => describeSObject(message.tabUrl, message.sobject, message.apiVersion),
+    describeGlobal: () => describeGlobal(message.tabUrl, message.apiVersion, message.tooling),
+    describeSObject: () =>
+      describeSObject(message.tabUrl, message.sobject, message.apiVersion, message.tooling),
     listFlows: () => listFlows(message.tabUrl, message.apiVersion),
     getApexCoverage: () => getApexCoverage(message.tabUrl, message.apiVersion),
     getRecentDeployFailures: () => getRecentDeployFailures(message.tabUrl, message.apiVersion),
@@ -62,7 +63,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
     fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.5.2",
+      version: "1.5.3",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       hasExecuteAnonymous: typeof executeAnonymous === "function",
@@ -387,14 +388,17 @@ async function restGet(tabUrl, path, apiVersion = DEFAULT_API_VERSION) {
   return sfFetchUrl(url, session.sid);
 }
 
-async function describeGlobal(tabUrl, apiVersion = DEFAULT_API_VERSION) {
-  return restGet(tabUrl, "/sobjects", apiVersion);
+async function describeGlobal(tabUrl, apiVersion = DEFAULT_API_VERSION, tooling = false) {
+  return restGet(tabUrl, tooling ? "/tooling/sobjects" : "/sobjects", apiVersion);
 }
 
-async function describeSObject(tabUrl, sobject, apiVersion = DEFAULT_API_VERSION) {
+async function describeSObject(tabUrl, sobject, apiVersion = DEFAULT_API_VERSION, tooling = false) {
   if (!sobject) throw new Error("Object API name required");
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(sobject)) throw new Error("Invalid object API name");
-  return restGet(tabUrl, `/sobjects/${sobject}/describe`, apiVersion);
+  const path = tooling
+    ? `/tooling/sobjects/${sobject}/describe`
+    : `/sobjects/${sobject}/describe`;
+  return restGet(tabUrl, path, apiVersion);
 }
 
 async function listFlows(tabUrl, apiVersion = DEFAULT_API_VERSION) {

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "OrgKit",
-  "version": "1.5.2",
-  "description": "OrgKit — Salesforce daily builder tools: slim side-tab, full-tab app, SOQL, Apex review, org limits, Excel/Sheets export.",
+  "version": "1.5.3",
+  "description": "OrgKit — Salesforce daily builder tools: SOQL field autocomplete, Tooling queries, slim side-tab, Excel/Sheets export.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",

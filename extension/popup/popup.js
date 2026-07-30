@@ -42,13 +42,20 @@ import {
   togglePinnedSoql
 } from "../lib/soql-library.js";
 import {
+  extractFromObject,
+  getTokenAtCursor,
+  filterApiNames,
+  applySuggestion,
+  isValidSObjectName
+} from "../lib/soql-assist.js";
+import {
   APEX_SNIPPETS,
   summarizeExecuteAnonymous,
   extractDebugOutput
 } from "../lib/anonymous-apex.js";
 
 const FEATURES = [
-  { id: "soql-run", title: "SOQL Runner", blurb: "Run, save library, Excel/Sheets" },
+  { id: "soql-run", title: "SOQL Runner", blurb: "Field autocomplete, Tooling, Excel" },
   { id: "anon-apex", title: "Anonymous Apex", blurb: "Execute + pull debug output" },
   { id: "describe", title: "Describe Browser", blurb: "Fields, picklists, dependencies" },
   { id: "meta-open", title: "Metadata Quick Open", blurb: "Jump to class, flow, LWC…" },
@@ -114,6 +121,16 @@ const state = {
   inactiveFlowSelected: [],
   soqlLibrary: [],
   editingSoqlId: null,
+  soqlAssist: {
+    mode: "rest",
+    objectNames: [],
+    fieldsByKey: {},
+    activeObject: null,
+    suggestions: [],
+    activeIndex: 0,
+    token: null,
+    loadSeq: 0
+  },
   apexClassResults: [],
   orgLimits: null
 };
@@ -192,6 +209,7 @@ function showView(id) {
   }
   if (id === "soql-run") {
     refreshSoqlLibrary().catch(() => {});
+    ensureSoqlObjectList().catch(() => {});
   }
   if (id === "governor" && !state.orgLimits) {
     loadOrgLimits().catch(() => {});
@@ -283,6 +301,7 @@ function bindUtilityActions() {
   $("#runSoql").addEventListener("click", runSoqlManual);
   $("#saveSoqlBtn").addEventListener("click", onSaveSoqlToLibrary);
   $("#soqlLibraryFilter").addEventListener("input", () => renderSoqlLibrary());
+  bindSoqlAssist();
   bindQueryExportPanel($("#soqlQueryPanel"), "soql", $("#soqlQueryStatus"));
   bindQueryExportPanel($("#nlQueryPanel"), "nl", $("#nlQueryStatus"));
   $("#runAnonApex").addEventListener("click", onRunAnonApex);
@@ -508,7 +527,7 @@ function renderSoqlLibrary() {
     const main = document.createElement("div");
     main.className = "soql-lib-main";
     const title = document.createElement("strong");
-    title.textContent = `${row.pinned ? "★ " : ""}${row.name}`;
+    title.textContent = `${row.pinned ? "★ " : ""}${row.name}${row.apiMode === "tooling" ? " · Tooling" : ""}`;
     const preview = document.createElement("code");
     preview.textContent = row.soql.length > 120 ? `${row.soql.slice(0, 117)}…` : row.soql;
     main.appendChild(title);
@@ -529,14 +548,18 @@ function renderSoqlLibrary() {
       mkBtn("Load", "btn", () => {
         $("#soqlInput").value = row.soql;
         $("#soqlSaveName").value = row.name;
+        if ($("#soqlApiMode")) $("#soqlApiMode").value = row.apiMode === "tooling" ? "tooling" : "rest";
         state.editingSoqlId = row.id;
         $("#soqlQueryStatus").textContent = `Loaded “${row.name}”.`;
+        onSoqlApiModeChange().catch(() => {});
+        refreshSoqlSuggestions();
       })
     );
     actions.appendChild(
       mkBtn("Run", "btn primary", async () => {
         $("#soqlInput").value = row.soql;
         $("#soqlSaveName").value = row.name;
+        if ($("#soqlApiMode")) $("#soqlApiMode").value = row.apiMode === "tooling" ? "tooling" : "rest";
         state.editingSoqlId = row.id;
         await runSoqlManual();
       })
@@ -568,7 +591,8 @@ async function onSaveSoqlToLibrary() {
     state.soqlLibrary = await saveSoqlEntry(currentOrgKey(), {
       id: state.editingSoqlId,
       name,
-      soql: $("#soqlInput").value
+      soql: $("#soqlInput").value,
+      apiMode: soqlApiMode()
     });
     $("#soqlSaveName").value = name;
     const match = state.soqlLibrary.find((r) => r.name === name && r.soql === String($("#soqlInput").value).trim());
@@ -1540,9 +1564,11 @@ async function runSoqlManual() {
   const panel = $("#soqlQueryPanel");
   const status = $("#soqlQueryStatus");
   clearQueryResult(panel, status, "soql", "Running…");
+  hideSoqlSuggest();
   try {
     await ensureSalesforceSiteAccess();
-    const res = await send("runSoql", {
+    const tooling = soqlApiMode() === "tooling";
+    const res = await send(tooling ? "toolingQuery" : "runSoql", {
       tabUrl: await requireTabUrl(),
       query: $("#soqlInput").value,
       apiVersion: apiVersion()
@@ -1551,6 +1577,318 @@ async function runSoqlManual() {
     renderQueryResult(panel, status, "soql", res.result);
   } catch (e) {
     clearQueryResult(panel, status, "soql", e.message);
+  }
+}
+
+function soqlApiMode() {
+  return $("#soqlApiMode")?.value === "tooling" ? "tooling" : "rest";
+}
+
+function bindSoqlAssist() {
+  const input = $("#soqlInput");
+  const mode = $("#soqlApiMode");
+  const obj = $("#soqlObjectHint");
+  const loadBtn = $("#soqlLoadFields");
+  if (!input || !mode) return;
+
+  mode.addEventListener("change", () => {
+    onSoqlApiModeChange().catch((e) => {
+      const status = $("#soqlQueryStatus");
+      if (status) status.textContent = e.message;
+    });
+  });
+  loadBtn?.addEventListener("click", () => {
+    ensureSoqlFieldsForActiveObject(true)
+      .then(() => refreshSoqlSuggestions())
+      .catch((e) => {
+        const status = $("#soqlQueryStatus");
+        if (status) status.textContent = e.message;
+      });
+  });
+  obj?.addEventListener("change", () => {
+    const name = (obj.value || "").trim();
+    if (!isValidSObjectName(name)) return;
+    seedSoqlFromObject(name);
+    ensureSoqlFieldsForActiveObject(true)
+      .then(() => refreshSoqlSuggestions())
+      .catch(() => {});
+  });
+  obj?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      loadBtn?.click();
+    }
+  });
+
+  let timer = null;
+  const schedule = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      refreshSoqlSuggestions();
+      ensureSoqlFieldsForActiveObject(false).catch(() => {});
+    }, 120);
+  };
+  input.addEventListener("input", schedule);
+  input.addEventListener("click", schedule);
+  input.addEventListener("keyup", (e) => {
+    if (["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(e.key)) return;
+    schedule();
+  });
+  input.addEventListener("keydown", onSoqlSuggestKeydown);
+  input.addEventListener("blur", () => {
+    setTimeout(() => hideSoqlSuggest(), 150);
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest?.(".soql-editor")) hideSoqlSuggest();
+  });
+}
+
+async function onSoqlApiModeChange() {
+  state.soqlAssist.mode = soqlApiMode();
+  state.soqlAssist.objectNames = [];
+  state.soqlAssist.activeObject = null;
+  const hint = $("#soqlAssistHint");
+  if (hint) {
+    hint.textContent =
+      state.soqlAssist.mode === "tooling"
+        ? "Tooling mode: query ApexClass, ApexTrigger, Flow, CustomObject, EntityDefinition, etc. Field autocomplete uses Tooling describe."
+        : "Standard mode: query Account, Case, custom objects, etc. Type field API names in SELECT — pick a suggestion to insert FieldName,";
+  }
+  const obj = $("#soqlObjectHint");
+  if (obj) {
+    obj.placeholder =
+      state.soqlAssist.mode === "tooling"
+        ? "Tooling object (ApexClass, Flow, CustomField…)"
+        : "Object API name (Account, Case, MyObj__c)";
+  }
+  await ensureSoqlObjectList(true);
+  await ensureSoqlFieldsForActiveObject(true);
+  refreshSoqlSuggestions();
+}
+
+async function ensureSoqlObjectList(force = false) {
+  const mode = soqlApiMode();
+  if (!force && state.soqlAssist.objectNames.length && state.soqlAssist.mode === mode) {
+    fillSoqlObjectDatalist();
+    return;
+  }
+  state.soqlAssist.mode = mode;
+  try {
+    await ensureSalesforceSiteAccess();
+    const res = await send("describeGlobal", {
+      tabUrl: await requireTabUrl(),
+      apiVersion: apiVersion(),
+      tooling: mode === "tooling"
+    });
+    if (!res.ok) throw new Error(res.error);
+    const sobjects = res.result?.sobjects || [];
+    state.soqlAssist.objectNames = sobjects
+      .map((o) => o.name)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    fillSoqlObjectDatalist();
+    const status = $("#soqlQueryStatus");
+    if (status && !status.textContent) {
+      status.textContent = `${state.soqlAssist.objectNames.length} ${mode === "tooling" ? "Tooling" : "standard"} objects available for autocomplete.`;
+    }
+  } catch (e) {
+    /* leave list empty; user can still type */
+    fillSoqlObjectDatalist();
+    throw e;
+  }
+}
+
+function fillSoqlObjectDatalist() {
+  const list = $("#soqlObjectList");
+  if (!list) return;
+  list.replaceChildren();
+  for (const name of state.soqlAssist.objectNames) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    list.appendChild(opt);
+  }
+}
+
+function resolveSoqlObjectName() {
+  const fromQuery = extractFromObject($("#soqlInput")?.value || "");
+  const hint = ($("#soqlObjectHint")?.value || "").trim();
+  if (fromQuery && isValidSObjectName(fromQuery)) return fromQuery;
+  if (hint && isValidSObjectName(hint)) return hint;
+  return null;
+}
+
+function fieldCacheKey(objectName) {
+  return `${soqlApiMode()}:${objectName}`;
+}
+
+async function ensureSoqlFieldsForActiveObject(force = false) {
+  const objectName = resolveSoqlObjectName();
+  if (!objectName) return null;
+  const key = fieldCacheKey(objectName);
+  if (!force && state.soqlAssist.fieldsByKey[key]) {
+    state.soqlAssist.activeObject = objectName;
+    return state.soqlAssist.fieldsByKey[key];
+  }
+  const seq = ++state.soqlAssist.loadSeq;
+  const hintEl = $("#soqlAssistHint");
+  if (hintEl) hintEl.textContent = `Loading fields for ${objectName}…`;
+  await ensureSalesforceSiteAccess();
+  const res = await send("describeSObject", {
+    tabUrl: await requireTabUrl(),
+    sobject: objectName,
+    apiVersion: apiVersion(),
+    tooling: soqlApiMode() === "tooling"
+  });
+  if (!res.ok) throw new Error(res.error);
+  if (seq !== state.soqlAssist.loadSeq) return null;
+  const fields = (res.result?.fields || []).map((f) => ({
+    name: f.name,
+    label: f.label,
+    type: f.type
+  }));
+  state.soqlAssist.fieldsByKey[key] = fields;
+  state.soqlAssist.activeObject = objectName;
+  if ($("#soqlObjectHint") && !$("#soqlObjectHint").value) {
+    $("#soqlObjectHint").value = objectName;
+  }
+  if (hintEl) {
+    hintEl.textContent = `${objectName}: ${fields.length} fields · type in SELECT to autocomplete (inserts FieldName,)`;
+  }
+  return fields;
+}
+
+function seedSoqlFromObject(objectName) {
+  const ta = $("#soqlInput");
+  if (!ta) return;
+  const current = ta.value.trim();
+  if (current) {
+    if (!extractFromObject(current)) {
+      ta.value = `${current.replace(/\s+$/, "")} FROM ${objectName} LIMIT 100`;
+    }
+    return;
+  }
+  ta.value = `SELECT Id,  FROM ${objectName} LIMIT 100`;
+  // Place cursor after "SELECT Id, "
+  const cursor = "SELECT Id, ".length;
+  ta.focus();
+  ta.setSelectionRange(cursor, cursor);
+}
+
+function refreshSoqlSuggestions() {
+  const ta = $("#soqlInput");
+  const box = $("#soqlSuggest");
+  if (!ta || !box) return;
+  const tokenInfo = getTokenAtCursor(ta.value, ta.selectionStart);
+  state.soqlAssist.token = tokenInfo;
+
+  if (!tokenInfo.context) {
+    hideSoqlSuggest();
+    return;
+  }
+
+  let items = [];
+  if (tokenInfo.context === "select") {
+    const objectName = resolveSoqlObjectName();
+    const fields = objectName ? state.soqlAssist.fieldsByKey[fieldCacheKey(objectName)] : null;
+    if (!fields?.length) {
+      hideSoqlSuggest();
+      return;
+    }
+    items = filterApiNames(fields, tokenInfo.token, 40);
+  } else if (tokenInfo.context === "from") {
+    items = filterApiNames(
+      state.soqlAssist.objectNames.map((name) => ({ name, label: "", type: "" })),
+      tokenInfo.token,
+      40
+    );
+  }
+
+  state.soqlAssist.suggestions = items;
+  state.soqlAssist.activeIndex = 0;
+  if (!items.length) {
+    hideSoqlSuggest();
+    return;
+  }
+  renderSoqlSuggest();
+}
+
+function renderSoqlSuggest() {
+  const box = $("#soqlSuggest");
+  if (!box) return;
+  const items = state.soqlAssist.suggestions;
+  box.replaceChildren();
+  items.forEach((item, idx) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `soql-suggest-item${idx === state.soqlAssist.activeIndex ? " active" : ""}`;
+    btn.setAttribute("role", "option");
+    const strong = document.createElement("strong");
+    strong.textContent = item.name;
+    const span = document.createElement("span");
+    span.textContent = [item.label, item.type].filter(Boolean).join(" · ");
+    btn.appendChild(strong);
+    if (span.textContent) btn.appendChild(span);
+    btn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      applySoqlSuggestion(idx);
+    });
+    box.appendChild(btn);
+  });
+  box.classList.remove("hidden");
+}
+
+function hideSoqlSuggest() {
+  const box = $("#soqlSuggest");
+  if (box) {
+    box.classList.add("hidden");
+    box.replaceChildren();
+  }
+  state.soqlAssist.suggestions = [];
+}
+
+function onSoqlSuggestKeydown(e) {
+  const open = state.soqlAssist.suggestions.length && !$("#soqlSuggest")?.classList.contains("hidden");
+  if (!open) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    state.soqlAssist.activeIndex = (state.soqlAssist.activeIndex + 1) % state.soqlAssist.suggestions.length;
+    renderSoqlSuggest();
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    state.soqlAssist.activeIndex =
+      (state.soqlAssist.activeIndex - 1 + state.soqlAssist.suggestions.length) % state.soqlAssist.suggestions.length;
+    renderSoqlSuggest();
+  } else if (e.key === "Enter" || e.key === "Tab") {
+    e.preventDefault();
+    applySoqlSuggestion(state.soqlAssist.activeIndex);
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    hideSoqlSuggest();
+  }
+}
+
+function applySoqlSuggestion(index) {
+  const ta = $("#soqlInput");
+  const item = state.soqlAssist.suggestions[index];
+  const tokenInfo = state.soqlAssist.token;
+  if (!ta || !item || !tokenInfo) return;
+  const appendComma = tokenInfo.context === "select";
+  const { text, cursor } = applySuggestion(ta.value, tokenInfo.start, tokenInfo.end, item.name, {
+    appendComma
+  });
+  ta.value = text;
+  ta.focus();
+  ta.setSelectionRange(cursor, cursor);
+  if (tokenInfo.context === "from") {
+    if ($("#soqlObjectHint")) $("#soqlObjectHint").value = item.name;
+    ensureSoqlFieldsForActiveObject(true)
+      .then(() => refreshSoqlSuggestions())
+      .catch(() => {});
+  }
+  hideSoqlSuggest();
+  // Re-open suggestions for next field after comma
+  if (appendComma) {
+    setTimeout(() => refreshSoqlSuggestions(), 0);
   }
 }
 

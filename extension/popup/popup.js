@@ -25,6 +25,15 @@ import {
 import { METADATA_SEARCH_TYPES, lightningBaseFromOrg } from "../lib/metadata-open.js";
 import { PACKAGE_TYPES, buildPackageXml, packageVersion } from "../lib/package-xml.js";
 import { buildFieldReferenceHint } from "../lib/flow-cleaner.js";
+import {
+  recordsToTable,
+  tableToCsv,
+  tableToTsv,
+  tableToExcelXml,
+  downloadTextFile,
+  defaultExportBasename,
+  copyText
+} from "../lib/query-export.js";
 
 const FEATURES = [
   { id: "describe", title: "Describe Browser", blurb: "Fields, picklists, dependencies" },
@@ -69,6 +78,14 @@ const state = {
   session: null,
   favorites: [],
   lastSoqlJson: "",
+  lastQueryJson: {
+    soql: "",
+    nl: ""
+  },
+  lastQueryTables: {
+    soql: null,
+    nl: null
+  },
   lastGenSoql: "",
   lastFormula: "",
   deployChecked: [],
@@ -209,9 +226,8 @@ function bindFeatureActions() {
 function bindUtilityActions() {
   $("#linkSearch").addEventListener("input", () => renderLinks($("#linkSearch").value));
   $("#runSoql").addEventListener("click", runSoqlManual);
-  $("#copySoqlResult").addEventListener("click", async () => {
-    if (state.lastSoqlJson) await navigator.clipboard.writeText(state.lastSoqlJson);
-  });
+  bindQueryExportPanel($("#soqlQueryPanel"), "soql", $("#soqlQueryStatus"));
+  bindQueryExportPanel($("#nlQueryPanel"), "nl", $("#nlQueryStatus"));
   $("#idInput").addEventListener("input", updateIdInfo);
   $("#openRecord").addEventListener("click", openRecord);
   $("#copy15").addEventListener("click", () => copyIdLength(15));
@@ -220,6 +236,122 @@ function bindUtilityActions() {
   $("#addFav").addEventListener("click", addFavorite);
   $("#saveCurrent").addEventListener("click", saveCurrentPage);
   updateIdInfo();
+}
+
+function bindQueryExportPanel(panel, key, statusEl) {
+  if (!panel) return;
+  panel.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-export]");
+    if (!btn) return;
+    const table = state.lastQueryTables[key];
+    const json = state.lastQueryJson[key] || "";
+    try {
+      await handleQueryExport(btn.dataset.export, table, json, statusEl);
+    } catch (err) {
+      if (statusEl) statusEl.textContent = err.message || String(err);
+    }
+  });
+}
+
+async function handleQueryExport(kind, table, json, statusEl) {
+  if (!table && kind !== "json") {
+    throw new Error("Run a query first.");
+  }
+  const base = defaultExportBasename("soql-results");
+  if (kind === "sheets") {
+    await copyText(tableToTsv(table));
+    if (statusEl) statusEl.textContent = "Copied for Google Sheets / Excel paste (TSV).";
+    return;
+  }
+  if (kind === "excel") {
+    downloadTextFile(
+      `${base}.xls`,
+      tableToExcelXml(table, "SOQL"),
+      "application/vnd.ms-excel"
+    );
+    if (statusEl) statusEl.textContent = `Downloaded ${base}.xls`;
+    return;
+  }
+  if (kind === "csv") {
+    downloadTextFile(`${base}.csv`, tableToCsv(table), "text/csv;charset=utf-8");
+    if (statusEl) statusEl.textContent = `Downloaded ${base}.csv`;
+    return;
+  }
+  if (kind === "json") {
+    if (!json) throw new Error("No JSON result to copy.");
+    await copyText(json);
+    if (statusEl) statusEl.textContent = "Copied JSON.";
+  }
+}
+
+function renderQueryResult(panel, statusEl, key, queryResult) {
+  const table = recordsToTable(queryResult);
+  state.lastQueryTables[key] = table;
+  state.lastQueryJson[key] = JSON.stringify(queryResult, null, 2);
+  state.lastSoqlJson = state.lastQueryJson[key];
+
+  if (!panel) return;
+  panel.classList.remove("hidden");
+  const meta = panel.querySelector("[data-query-meta]");
+  const wrap = panel.querySelector("[data-query-table]");
+  if (meta) {
+    const more = table.done === false ? " · more rows available" : "";
+    meta.textContent = `${table.recordCount} row${table.recordCount === 1 ? "" : "s"} · ${table.columns.length} column${
+      table.columns.length === 1 ? "" : "s"
+    }${typeof table.totalSize === "number" ? ` · totalSize ${table.totalSize}` : ""}${more}`;
+  }
+  if (!wrap) return;
+  wrap.replaceChildren();
+
+  if (!table.recordCount) {
+    const empty = document.createElement("div");
+    empty.className = "query-empty";
+    empty.textContent = "Query returned 0 records.";
+    wrap.appendChild(empty);
+    if (statusEl) statusEl.textContent = "Ready to export an empty sheet, or adjust the query.";
+    return;
+  }
+
+  const tableEl = document.createElement("table");
+  tableEl.className = "query-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const col of table.columns) {
+    const th = document.createElement("th");
+    th.textContent = col;
+    th.title = col;
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  tableEl.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  for (const row of table.rows) {
+    const tr = document.createElement("tr");
+    for (const cell of row) {
+      const td = document.createElement("td");
+      td.textContent = cell;
+      td.title = cell;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  tableEl.appendChild(tbody);
+  wrap.appendChild(tableEl);
+  if (statusEl) statusEl.textContent = "Export or copy when ready.";
+}
+
+function clearQueryResult(panel, statusEl, key, message) {
+  state.lastQueryTables[key] = null;
+  state.lastQueryJson[key] = "";
+  if (panel) {
+    panel.classList.add("hidden");
+    const wrap = panel.querySelector("[data-query-table]");
+    if (wrap) wrap.replaceChildren();
+    const meta = panel.querySelector("[data-query-meta]");
+    if (meta) meta.textContent = "";
+  }
+  if (statusEl) statusEl.textContent = message || "";
 }
 
 function fillApiVersions() {
@@ -303,12 +435,13 @@ async function onGenSoql() {
 }
 
 async function onRunGenSoql() {
-  const box = $("#nlSoqlRunOut");
+  const panel = $("#nlQueryPanel");
+  const status = $("#nlQueryStatus");
   if (!state.lastGenSoql) {
-    box.textContent = "Generate a query first.";
+    clearQueryResult(panel, status, "nl", "Generate a query first.");
     return;
   }
-  box.textContent = "Running…";
+  clearQueryResult(panel, status, "nl", "Running…");
   try {
     const res = await send("runSoql", {
       tabUrl: requireTabUrl(),
@@ -316,9 +449,9 @@ async function onRunGenSoql() {
       apiVersion: apiVersion()
     });
     if (!res.ok) throw new Error(res.error);
-    box.textContent = JSON.stringify(res.result, null, 2);
+    renderQueryResult(panel, status, "nl", res.result);
   } catch (e) {
-    box.textContent = e.message;
+    clearQueryResult(panel, status, "nl", e.message);
   }
 }
 
@@ -1025,8 +1158,9 @@ async function openQuickLink(item) {
 }
 
 async function runSoqlManual() {
-  const box = $("#soqlResult");
-  box.textContent = "Running…";
+  const panel = $("#soqlQueryPanel");
+  const status = $("#soqlQueryStatus");
+  clearQueryResult(panel, status, "soql", "Running…");
   try {
     const res = await send("runSoql", {
       tabUrl: requireTabUrl(),
@@ -1034,11 +1168,9 @@ async function runSoqlManual() {
       apiVersion: apiVersion()
     });
     if (!res.ok) throw new Error(res.error);
-    state.lastSoqlJson = JSON.stringify(res.result, null, 2);
-    box.textContent = state.lastSoqlJson;
+    renderQueryResult(panel, status, "soql", res.result);
   } catch (e) {
-    box.textContent = e.message;
-    state.lastSoqlJson = "";
+    clearQueryResult(panel, status, "soql", e.message);
   }
 }
 

@@ -46,10 +46,20 @@
     <div class="row">
       <button type="button" class="btn primary" id="genSoql">Generate SOQL</button>
       <button type="button" class="btn" id="runGenSoql">Run</button>
-      <button type="button" class="btn" id="copyGenSoql">Copy</button>
+      <button type="button" class="btn" id="copyGenSoql">Copy SOQL</button>
     </div>
     <pre id="nlSoqlOut" class="result"></pre>
-    <pre id="nlSoqlRunOut" class="result dim"></pre>
+    <div id="nlQueryPanel" class="query-panel hidden" data-query-panel="nl">
+      <div class="query-toolbar">
+        <span class="query-meta" data-query-meta></span>
+        <button type="button" class="btn" data-export="sheets">Copy for Sheets</button>
+        <button type="button" class="btn" data-export="excel">Export Excel</button>
+        <button type="button" class="btn ghost" data-export="csv">CSV</button>
+        <button type="button" class="btn ghost" data-export="json">JSON</button>
+      </div>
+      <div class="query-table-wrap" data-query-table></div>
+    </div>
+    <div id="nlQueryStatus" class="query-status"></div>
   </section>
 
   <!-- FEATURE: Flow Analyzer -->
@@ -209,13 +219,23 @@
 
   <!-- UTIL: SOQL runner -->
   <section id="view-soql-run" class="view">
+    <label class="label" for="soqlInput">SOQL</label>
     <textarea id="soqlInput" class="textarea" rows="5" placeholder="SELECT Id, Name FROM Account LIMIT 10"></textarea>
     <div class="row">
-      <select id="apiVersion" class="select"></select>
-      <button type="button" class="btn primary" id="runSoql">Run</button>
-      <button type="button" class="btn" id="copySoqlResult">Copy</button>
+      <select id="apiVersion" class="select" title="API version"></select>
+      <button type="button" class="btn primary" id="runSoql">Run query</button>
     </div>
-    <pre id="soqlResult" class="result"></pre>
+    <div id="soqlQueryPanel" class="query-panel hidden" data-query-panel="soql">
+      <div class="query-toolbar">
+        <span class="query-meta" data-query-meta></span>
+        <button type="button" class="btn" data-export="sheets">Copy for Sheets</button>
+        <button type="button" class="btn" data-export="excel">Export Excel</button>
+        <button type="button" class="btn ghost" data-export="csv">CSV</button>
+        <button type="button" class="btn ghost" data-export="json">JSON</button>
+      </div>
+      <div class="query-table-wrap" data-query-table></div>
+    </div>
+    <div id="soqlQueryStatus" class="query-status"></div>
   </section>
 
   <!-- UTIL: IDs -->

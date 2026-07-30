@@ -2,6 +2,8 @@ import {
   isSalesforceUrl,
   parseOrgFromUrl,
   restUrl,
+  toSalesforceApiHost,
+  toSalesforceApiBase,
   DEFAULT_API_VERSION
 } from "../lib/salesforce.js";
 import { METADATA_SEARCH_TYPES } from "../lib/metadata-open.js";
@@ -60,7 +62,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
     fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.5.1",
+      version: "1.5.2",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       hasExecuteAnonymous: typeof executeAnonymous === "function",
@@ -293,11 +295,12 @@ async function getSessionForOrg(org) {
   // Prefer my.salesforce.com sid for REST/Tooling. Lightning/setup sids are
   // host-scoped and return "Session expired or invalid" against apiBase.
   const hostsToTry = unique([
-    org.hostname.replace(".lightning.force.com", ".my.salesforce.com"),
-    org.hostname.replace(".salesforce-setup.com", ".my.salesforce.com"),
+    toSalesforceApiHost(org.hostname),
     org.apiBase ? new URL(org.apiBase).hostname : null,
     org.hostname,
-    org.hostname.replace(".my.salesforce.com", ".lightning.force.com")
+    org.hostname.includes("lightning.force.com")
+      ? org.hostname
+      : toSalesforceApiHost(org.hostname).replace(".my.salesforce.com", ".lightning.force.com")
   ]);
 
   let sid = null;
@@ -329,11 +332,7 @@ async function getSessionForOrg(org) {
     return { sid: null, apiBase: org.apiBase, cookieHost: null, userInfo: null };
   }
 
-  const apiBase = cookieHost
-    ? `https://${cookieHost
-        .replace(".lightning.force.com", ".my.salesforce.com")
-        .replace(".salesforce-setup.com", ".my.salesforce.com")}`
-    : org.apiBase;
+  const apiBase = cookieHost ? toSalesforceApiBase(cookieHost) : toSalesforceApiBase(org.apiBase || org.hostname);
 
   let userInfo = null;
   try {
@@ -753,8 +752,9 @@ function networkBlockedMessage(url, err) {
   }
   return (
     `Failed to reach Salesforce API (${host}). ` +
-    `Usually Chrome Site access is restricted: chrome://extensions → OrgKit → Details → Site access → set “On all sites” (or allow *.salesforce.com / *.force.com). ` +
-    `Also keep a logged-in Salesforce tab open, then click Reload on the extension. ` +
+    `Usually Chrome Site access is restricted: chrome://extensions → OrgKit → Details → Site access → turn ON each Salesforce domain (or “On all sites”). ` +
+    `Listing the URLs is not enough if their toggles are gray/off. ` +
+    `Then Reload the extension and keep a logged-in Salesforce tab open. ` +
     `Detail: ${err?.message || err}`
   );
 }

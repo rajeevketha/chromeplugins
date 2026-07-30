@@ -1,7 +1,7 @@
 /** Salesforce org / session helpers shared by popup & background. */
 
 const SF_HOST_RE =
-  /^(?<sub>[a-z0-9-]+)\.(?<rest>my\.salesforce\.com|lightning\.force\.com|salesforce\.com|cloudforce\.com|visual\.force\.com|vf\.force\.com|salesforce-setup\.com)$/i;
+  /^(?<sub>[a-z0-9-]+)\.(?<rest>my\.salesforce\.com|lightning\.force\.com|salesforce\.com|cloudforce\.com|visual\.force\.com|vf\.force\.com|salesforce-setup\.com|my\.salesforce-setup\.com)$/i;
 
 export function isSalesforceUrl(url) {
   try {
@@ -10,6 +10,46 @@ export function isSalesforceUrl(url) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Map Lightning / Setup hostnames to the REST API host (*.my.salesforce.com).
+ * Critical: *.my.salesforce-setup.com must become *.my.salesforce.com
+ * (NOT *.my.my.salesforce.com).
+ */
+export function toSalesforceApiHost(hostname) {
+  let h = String(hostname || "")
+    .trim()
+    .replace(/^\./, "")
+    .toLowerCase();
+  if (!h) return h;
+  // Repair already-broken hosts from older builds
+  h = h.replace(/\.my\.my\.salesforce\.com$/i, ".my.salesforce.com");
+  if (h.endsWith(".my.salesforce.com")) return h;
+  if (h.endsWith(".lightning.force.com")) {
+    return h.replace(/\.lightning\.force\.com$/i, ".my.salesforce.com");
+  }
+  if (h.endsWith(".my.salesforce-setup.com")) {
+    return h.replace(/\.my\.salesforce-setup\.com$/i, ".my.salesforce.com");
+  }
+  if (h.endsWith(".salesforce-setup.com")) {
+    return h.replace(/\.salesforce-setup\.com$/i, ".my.salesforce.com");
+  }
+  return h;
+}
+
+export function toSalesforceApiBase(hostnameOrOrigin) {
+  const raw = String(hostnameOrOrigin || "").trim();
+  if (!raw) return "";
+  try {
+    if (raw.includes("://")) {
+      const u = new URL(raw);
+      return `${u.protocol}//${toSalesforceApiHost(u.hostname)}`;
+    }
+  } catch {
+    /* treat as hostname */
+  }
+  return `https://${toSalesforceApiHost(raw)}`;
 }
 
 export function parseOrgFromUrl(url) {
@@ -28,13 +68,7 @@ export function parseOrgFromUrl(url) {
       host.includes("scratch");
 
     let instanceBase = `${u.protocol}//${u.hostname}`;
-    // Normalize lightning host → my.salesforce.com for API when possible
-    let apiHost = host;
-    if (host.endsWith(".lightning.force.com")) {
-      apiHost = host.replace(".lightning.force.com", ".my.salesforce.com");
-    } else if (host.endsWith(".salesforce-setup.com")) {
-      apiHost = host.replace(".salesforce-setup.com", ".my.salesforce.com");
-    }
+    const apiHost = toSalesforceApiHost(host);
 
     const myDomain = host.split(".")[0].replace(/--.*$/, "");
     const envLabel = isSandbox ? "Sandbox" : isDevEd ? "Developer" : "Production";

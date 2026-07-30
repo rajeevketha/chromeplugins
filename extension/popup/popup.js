@@ -1568,7 +1568,7 @@ async function ensureSalesforceSiteAccess() {
     const granted = await chrome.permissions.request({ origins });
     if (!granted) {
       throw new Error(
-        "Chrome blocked Salesforce access. Open chrome://extensions → OrgKit → Details → Site access → “On all sites”, then Reload the extension."
+        "Chrome blocked Salesforce access. Open chrome://extensions → OrgKit → Details → Site access → turn ON each Salesforce domain (or “On all sites”), then Reload the extension."
       );
     }
     return true;

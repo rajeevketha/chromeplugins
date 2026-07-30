@@ -137,10 +137,15 @@
   }
 
   function apiBase() {
-    if (location.hostname.includes("lightning.force.com")) {
+    const host = location.hostname.toLowerCase();
+    if (host.endsWith(".my.salesforce.com")) return location.origin;
+    if (host.endsWith(".lightning.force.com")) {
       return location.origin.replace(".lightning.force.com", ".my.salesforce.com");
     }
-    if (location.hostname.includes("salesforce-setup.com")) {
+    if (host.endsWith(".my.salesforce-setup.com")) {
+      return location.origin.replace(".my.salesforce-setup.com", ".my.salesforce.com");
+    }
+    if (host.endsWith(".salesforce-setup.com")) {
       return location.origin.replace(".salesforce-setup.com", ".my.salesforce.com");
     }
     return location.origin;

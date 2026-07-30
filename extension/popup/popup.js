@@ -1407,6 +1407,7 @@ async function runSoqlManual() {
   const status = $("#soqlQueryStatus");
   clearQueryResult(panel, status, "soql", "Running…");
   try {
+    await ensureSalesforceSiteAccess();
     const res = await send("runSoql", {
       tabUrl: await requireTabUrl(),
       query: $("#soqlInput").value,
@@ -1416,6 +1417,30 @@ async function runSoqlManual() {
     renderQueryResult(panel, status, "soql", res.result);
   } catch (e) {
     clearQueryResult(panel, status, "soql", e.message);
+  }
+}
+
+/** Ask Chrome for Salesforce host access on a user gesture (fixes “Failed to fetch”). */
+async function ensureSalesforceSiteAccess() {
+  const origins = [
+    "https://*.salesforce.com/*",
+    "https://*.force.com/*",
+    "https://*.cloudforce.com/*",
+    "https://*.salesforce-setup.com/*"
+  ];
+  try {
+    const has = await chrome.permissions.contains({ origins });
+    if (has) return true;
+    const granted = await chrome.permissions.request({ origins });
+    if (!granted) {
+      throw new Error(
+        "Chrome blocked Salesforce access. Open chrome://extensions → OrgKit → Details → Site access → “On all sites”, then Reload the extension."
+      );
+    }
+    return true;
+  } catch (e) {
+    if (/Chrome blocked Salesforce/.test(e.message || "")) throw e;
+    return false;
   }
 }
 

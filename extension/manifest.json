@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "OrgKit",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "OrgKit — Salesforce daily builder tools: saved SOQL library, anonymous Apex runner, Excel/Sheets export, describe/dependent picklists, metadata quick open, package.xml, inactive flow cleaner, NL→SOQL, analyzers.",
   "icons": {
     "16": "icons/icon16.png",

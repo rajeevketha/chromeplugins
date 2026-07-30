@@ -51,7 +51,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
     fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.4.1",
+      version: "1.4.2",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       hasExecuteAnonymous: typeof executeAnonymous === "function",
@@ -194,6 +194,7 @@ async function runSoql(tabUrl, query, apiVersion = DEFAULT_API_VERSION) {
   if (!query?.trim()) throw new Error("SOQL query is empty");
   // Security: caller must not concatenate untrusted input without binds — UI tools use fixed templates.
   const { session } = await requireSession(tabUrl);
+  await ensureHostFetchAllowed(session.apiBase);
   const url = restUrl(session.apiBase, `/query?q=${encodeURIComponent(query.trim())}`, apiVersion);
   return sfFetchUrl(url, session.sid);
 }
@@ -201,12 +202,14 @@ async function runSoql(tabUrl, query, apiVersion = DEFAULT_API_VERSION) {
 async function toolingQuery(tabUrl, query, apiVersion = DEFAULT_API_VERSION) {
   if (!query?.trim()) throw new Error("Tooling query is empty");
   const { session } = await requireSession(tabUrl);
+  await ensureHostFetchAllowed(session.apiBase);
   const url = restUrl(session.apiBase, `/tooling/query?q=${encodeURIComponent(query.trim())}`, apiVersion);
   return sfFetchUrl(url, session.sid);
 }
 
 async function restGet(tabUrl, path, apiVersion = DEFAULT_API_VERSION) {
   const { session } = await requireSession(tabUrl);
+  await ensureHostFetchAllowed(session.apiBase);
   const url = path.startsWith("http") ? path : restUrl(session.apiBase, path, apiVersion);
   return sfFetchUrl(url, session.sid);
 }
@@ -484,15 +487,62 @@ async function fetchLatestApexDebug(tabUrl, apiVersion = DEFAULT_API_VERSION) {
   };
 }
 
+async function ensureHostFetchAllowed(apiBase) {
+  if (!apiBase) throw new Error("Missing Salesforce API host.");
+  let origin;
+  try {
+    origin = new URL(apiBase).origin;
+  } catch {
+    throw new Error(`Invalid Salesforce API host: ${apiBase}`);
+  }
+  // Host permissions are declared in the manifest; if the user set Site access to
+  // "On click", Chrome still blocks fetch with a bare "Failed to fetch".
+  try {
+    const originPattern = `${origin}/*`;
+    const hasExact = await chrome.permissions.contains({ origins: [originPattern] });
+    if (!hasExact) {
+      const granted = await chrome.permissions.request({ origins: [originPattern] });
+      if (!granted) {
+        throw new Error(
+          `Chrome blocked access to ${origin}. Open chrome://extensions → OrgKit → Details → Site access → “On all sites”, then reload and retry.`
+        );
+      }
+    }
+  } catch (e) {
+    if (/Chrome blocked access|Invalid Salesforce|Missing Salesforce/.test(e.message || "")) throw e;
+    // permissions.request can fail from SW without a user gesture — continue; fetch error handler clarifies.
+  }
+}
+
+function networkBlockedMessage(url, err) {
+  let host = url;
+  try {
+    host = new URL(url).host;
+  } catch {
+    /* keep raw */
+  }
+  return (
+    `Failed to reach Salesforce API (${host}). ` +
+    `Usually Chrome Site access is restricted: chrome://extensions → OrgKit → Details → Site access → set “On all sites” (or allow *.salesforce.com / *.force.com). ` +
+    `Also keep a logged-in Salesforce tab open, then click Reload on the extension. ` +
+    `Detail: ${err?.message || err}`
+  );
+}
+
 async function sfFetchText(url, sid) {
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${sid}`,
-      Accept: "text/plain, application/json"
-    },
-    credentials: "omit"
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${sid}`,
+        Accept: "text/plain, application/json"
+      },
+      credentials: "omit"
+    });
+  } catch (e) {
+    throw new Error(networkBlockedMessage(url, e));
+  }
   const text = await res.text();
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
@@ -509,14 +559,19 @@ async function sfFetchText(url, sid) {
 
 async function sfFetchUrl(url, sid, options = {}) {
   const method = options.method || "GET";
-  const res = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${sid}`,
-      Accept: "application/json"
-    },
-    credentials: "omit"
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${sid}`,
+        Accept: "application/json"
+      },
+      credentials: "omit"
+    });
+  } catch (e) {
+    throw new Error(networkBlockedMessage(url, e));
+  }
 
   if (method === "DELETE" && (res.status === 204 || res.status === 200)) {
     return { ok: true };

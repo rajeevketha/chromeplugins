@@ -65,7 +65,7 @@ const FEATURES = [
 ];
 
 const TITLES = {
-  home: "SF Dev Toolkit",
+  home: "OrgKit",
   describe: "Describe Browser",
   "meta-open": "Metadata Quick Open",
   package: "Package.xml Builder",
@@ -181,7 +181,7 @@ function showView(id) {
   document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
   const el = $(`#view-${id}`);
   if (el) el.classList.add("active");
-  $("#headerTitle").textContent = TITLES[id] || "SF Dev Toolkit";
+  $("#headerTitle").textContent = TITLES[id] || "OrgKit";
   $("#backBtn").classList.toggle("hidden", id === "home");
   if (id === "describe" && !state.globalObjects) {
     preloadGlobalObjects().catch(() => {});

@@ -90,7 +90,7 @@ const CATALOG = [
     fixes: [
       "Bulkify: no SOQL/DML in loops.",
       "Move heavy work to Queueable/Batch/Future.",
-      "Use the Debug Log Analyzer and Governor Limit Predictor in this toolkit."
+      "Use OrgKit’s Debug Log Analyzer and Governor Limit Predictor."
     ]
   },
   {

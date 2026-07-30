@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "SF Dev Toolkit",
-  "version": "1.4.0",
-  "description": "Salesforce developer toolkit: saved SOQL library, anonymous Apex runner, Excel/Sheets export, describe/dependent picklists, metadata quick open, package.xml, inactive flow cleaner, NL→SOQL, analyzers.",
+  "name": "OrgKit",
+  "version": "1.4.1",
+  "description": "OrgKit — Salesforce daily builder tools: saved SOQL library, anonymous Apex runner, Excel/Sheets export, describe/dependent picklists, metadata quick open, package.xml, inactive flow cleaner, NL→SOQL, analyzers.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -16,7 +16,7 @@
       "32": "icons/icon32.png",
       "48": "icons/icon48.png"
     },
-    "default_title": "SF Dev Toolkit"
+    "default_title": "OrgKit"
   },
   "background": {
     "service_worker": "background/service-worker.js",

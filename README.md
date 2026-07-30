@@ -1,6 +1,6 @@
-# SF Dev Toolkit
+# OrgKit
 
-Chrome extension for Salesforce developers — eight day-to-day assistants plus Setup utilities.
+Chrome extension for Salesforce developers — day-to-day org tools (SOQL, Apex, schema, flows, deploy) plus Setup utilities.
 
 ## Features
 

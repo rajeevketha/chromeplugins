@@ -6,7 +6,7 @@ export const APEX_SNIPPETS = [
   {
     id: "hello",
     label: "Hello debug",
-    body: `System.debug('SF Dev Toolkit OK');`
+    body: `System.debug('OrgKit OK');`
   },
   {
     id: "query-json",

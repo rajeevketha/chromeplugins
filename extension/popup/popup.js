@@ -710,7 +710,27 @@ async function onGenSoql() {
   const out = $("#nlSoqlOut");
   out.textContent = "Generating…";
   try {
-    const result = await generateSoql($("#nlInput").value);
+    let sobjects = Array.isArray(state.globalObjects) ? state.globalObjects : [];
+    // Need full describe rows (name/label), not just name strings from older cache.
+    if (!sobjects.length || typeof sobjects[0] === "string") {
+      try {
+        out.textContent = "Loading org objects for custom-object matching…";
+        const res = await send("describeGlobal", {
+          tabUrl: await requireTabUrl(),
+          apiVersion: apiVersion()
+        });
+        if (res.ok) {
+          sobjects = res.result?.sobjects || [];
+          state.globalObjects = sobjects;
+          fillDescribeObjectDatalist(sobjects);
+        } else {
+          sobjects = [];
+        }
+      } catch {
+        sobjects = [];
+      }
+    }
+    const result = await generateSoql($("#nlInput").value, { sobjects });
     state.lastGenSoql = result.soql;
     out.textContent = `${result.soql}\n\n// source: ${result.source}\n${result.notes.map((n) => `// ${n}`).join("\n")}`;
   } catch (e) {
@@ -1136,15 +1156,25 @@ async function preloadGlobalObjects() {
   try {
     const res = await send("describeGlobal", { tabUrl: await requireTabUrl(), apiVersion: apiVersion() });
     if (!res.ok) return;
-    const names = (res.result.sobjects || []).map((s) => s.name).sort();
-    state.globalObjects = names;
-    $("#describeObjectList").innerHTML = names
-      .slice(0, 500)
-      .map((n) => `<option value="${escapeHtml(n)}"></option>`)
-      .join("");
+    const sobjects = res.result.sobjects || [];
+    state.globalObjects = sobjects;
+    fillDescribeObjectDatalist(sobjects);
   } catch {
     /* optional */
   }
+}
+
+function fillDescribeObjectDatalist(sobjects) {
+  const list = $("#describeObjectList");
+  if (!list) return;
+  const names = (sobjects || [])
+    .map((s) => (typeof s === "string" ? s : s.name))
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+  list.innerHTML = names
+    .slice(0, 500)
+    .map((n) => `<option value="${escapeHtml(n)}"></option>`)
+    .join("");
 }
 
 async function onLoadDescribe() {

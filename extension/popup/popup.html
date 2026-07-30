@@ -43,7 +43,8 @@
   <!-- FEATURE: NL SOQL -->
   <section id="view-nl-soql" class="view">
     <label class="label" for="nlInput">Describe the data you need</label>
-    <textarea id="nlInput" class="textarea" rows="3" placeholder="Show me open Cases created this week with High priority"></textarea>
+    <textarea id="nlInput" class="textarea" rows="3" placeholder="Show me all SAP products&#10;or: SELECT from SAP_Product__c created this week"></textarea>
+    <p class="hint">Uses your org’s object list so custom objects (e.g. <code>SAP_Product__c</code>) match phrases like “sap products”. AI is optional.</p>
     <div class="row">
       <button type="button" class="btn primary" id="genSoql">Generate SOQL</button>
       <button type="button" class="btn" id="runGenSoql">Run</button>

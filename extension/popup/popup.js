@@ -707,6 +707,14 @@ async function saveRecordDrawer() {
     setRecordDrawerStatus("No changes to save.");
     return;
   }
+  const fieldList = Object.keys(body).join(", ");
+  const ok = confirm(
+    `Update ${ed.sobject} ${ed.id}?\n\nFields: ${fieldList}\n\nThis writes to your Salesforce org using your current session.`
+  );
+  if (!ok) {
+    setRecordDrawerStatus("Save cancelled.");
+    return;
+  }
   setRecordDrawerStatus(`Saving ${changed} field${changed === 1 ? "" : "s"}…`);
   const res = await send("updateSObject", {
     tabUrl: await requireTabUrl(),

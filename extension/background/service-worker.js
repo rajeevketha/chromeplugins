@@ -76,12 +76,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
     fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.5.5",
+      version: "1.6.0",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       hasExecuteAnonymous: typeof executeAnonymous === "function",
       hasOrgLimits: typeof getOrgLimits === "function",
       hasRecordCrud: typeof updateSObject === "function",
+      privacyPolicy: "privacy.html",
       metadataTypeCount: METADATA_SEARCH_TYPES.length,
       packageTypeCount: PACKAGE_TYPES.length
     })
@@ -345,13 +346,11 @@ async function getSessionForOrg(org) {
   }
 
   if (!sid) {
-    const all = await chrome.cookies.getAll({ name: "sid" });
-    // Prefer classic/API host cookies over lightning/setup UI cookies.
-    const ranked = [...all].sort((a, b) => apiCookieRank(b.domain) - apiCookieRank(a.domain));
-    const match = ranked.find((c) =>
-      /\.(salesforce|force|cloudforce)\.com$/i.test(c.domain.replace(/^\./, ""))
-    );
-    if (match) {
+    // Only read sid cookies on Salesforce-related domains (never scan unrelated sites).
+    const sfCookies = await listSalesforceSidCookies();
+    const ranked = [...sfCookies].sort((a, b) => apiCookieRank(b.domain) - apiCookieRank(a.domain));
+    const match = ranked[0];
+    if (match?.value) {
       sid = match.value;
       cookieHost = match.domain.replace(/^\./, "");
     }
@@ -384,6 +383,37 @@ function apiCookieRank(domain) {
   if (d.endsWith(".salesforce.com") && !d.includes("setup")) return 2;
   if (d.endsWith(".lightning.force.com") || d.endsWith(".salesforce-setup.com")) return 0;
   return 1;
+}
+
+/**
+ * Privacy: only request sid cookies for known Salesforce registrable domains.
+ * Do not call cookies.getAll({ name: "sid" }) across the whole browser profile.
+ */
+async function listSalesforceSidCookies() {
+  const domains = [
+    ".salesforce.com",
+    ".force.com",
+    ".cloudforce.com",
+    ".salesforce-setup.com",
+    ".visualforce.com"
+  ];
+  const out = [];
+  for (const domain of domains) {
+    try {
+      const part = await chrome.cookies.getAll({ name: "sid", domain });
+      if (Array.isArray(part)) out.push(...part);
+    } catch {
+      /* ignore per-domain failures */
+    }
+  }
+  // De-dupe by domain+value length marker (never log values)
+  const seen = new Set();
+  return out.filter((c) => {
+    const key = `${c.domain}|${c.path}|${String(c.value || "").length}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 async function requireSession(tabUrl) {

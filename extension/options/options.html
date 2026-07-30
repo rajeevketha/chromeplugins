@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OrgKit — Settings</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <img src="../icons/icon48.png" alt="" width="36" height="36" />
+      <div>
+        <h1>OrgKit</h1>
+        <p>Settings for OrgKit. Click the slim <strong>OrgKit</strong> tab on the right edge of Salesforce pages, the Chrome toolbar icon, or press Alt+Shift+O.</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>On-page helpers</h2>
+      <label class="check">
+        <input type="checkbox" id="showBadge" />
+        Show environment badge (Sandbox / Production)
+      </label>
+      <label class="check">
+        <input type="checkbox" id="showToolbar" />
+        Show OrgKit edge tab / quick links on Salesforce pages
+      </label>
+      <p class="muted">On the page, use <strong>Hide</strong> to tuck the tab away — a <strong>Show</strong> control stays on the right edge so you can bring it back. Uncheck here only if you want it fully off.</p>
+    </section>
+
+    <section class="card">
+      <h2>Salesforce API</h2>
+      <label for="apiVersion">Default API version</label>
+      <select id="apiVersion"></select>
+    </section>
+
+    <section class="card">
+      <h2>Optional AI (OpenAI-compatible)</h2>
+      <p class="muted">
+        Used to enhance NL→SOQL, Formula Builder, Error Decoder, and Apex Review.
+        Offline rule engines always work without AI.
+        <strong>Never sends your Salesforce session ID</strong> — only the text you paste into those tools.
+      </p>
+      <label class="check">
+        <input type="checkbox" id="aiEnabled" />
+        Enable AI assist
+      </label>
+      <label for="aiApiKey">API key</label>
+      <input type="password" id="aiApiKey" class="text" placeholder="sk-…" autocomplete="off" />
+      <label for="aiBaseUrl">Base URL</label>
+      <input type="url" id="aiBaseUrl" class="text" placeholder="https://api.openai.com/v1" />
+      <label for="aiModel">Model</label>
+      <input type="text" id="aiModel" class="text" placeholder="gpt-4o-mini" />
+      <p class="muted">Stored in local extension storage (not sync). Grant host access when prompted.</p>
+    </section>
+
+    <section class="card">
+      <h2>Privacy &amp; Chrome Web Store</h2>
+      <p class="muted">
+        OrgKit uses your open Salesforce tab session in the browser only.
+        It does not upload your <code>sid</code> to OrgKit servers (there are none).
+        Optional AI uses your key and only the text you paste.
+      </p>
+      <p>
+        <a href="../privacy.html" target="_blank" rel="noopener">Open Privacy Policy</a>
+      </p>
+      <ul class="muted" style="margin:8px 0 0; padding-left:1.1rem; font-size:13px; line-height:1.45">
+        <li><strong>cookies</strong> — Salesforce session on Salesforce domains only</li>
+        <li><strong>storage</strong> — settings &amp; saved queries (never stores sid)</li>
+        <li><strong>Salesforce host access</strong> — APIs + on-page launcher (Salesforce sites only)</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Favorites</h2>
+      <p class="muted">Stored in Chrome sync storage (max ~50).</p>
+      <button type="button" id="clearFavs" class="btn danger">Clear all favorites</button>
+    </section>
+
+    <p id="status" class="status" role="status"></p>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

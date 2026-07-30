@@ -1,0 +1,49 @@
+================================================================================
+Chrome Web Store — Privacy practices / data safety questionnaire answers
+================================================================================
+
+Does this extension collect or transmit user data?
+  Yes — limited, as described below.
+
+What user data is collected?
+  • Personally identifiable information: may DISPLAY Salesforce CRM data the user queries
+    (names, emails in org records, etc.) in the UI; OrgKit does not harvest or upload this
+    to OrgKit servers (there are none).
+  • Health / financial / auth / location / web history / personal communications: No
+    (except Salesforce records the user themselves queries may contain such fields —
+    OrgKit does not specifically target those categories).
+  • Website content: Yes, limited — reads Salesforce page context / session to call APIs
+    the user starts.
+  • User activity: No analytics / tracking.
+  • Extension storage: settings, favorites, saved SOQL text, optional AI key (local).
+
+Is user data sold to third parties?
+  No
+
+Is user data used for purposes unrelated to the extension’s single purpose?
+  No
+
+Is user data transferred to third parties?
+  Only:
+  • Salesforce APIs when the user runs a feature
+  • Optional AI provider the user configures (prompt text only; never sid)
+
+Is user data used for determining creditworthiness or for lending purposes?
+  No
+
+Does the extension handle personal or sensitive user data?
+  May display Salesforce CRM data returned by APIs the user triggers. Session cookie used
+  in-browser only. No OrgKit backend stores this data.
+
+Privacy policy URL
+  (Public HTTPS URL of privacy.html — see LISTING_COPY.txt)
+
+Remote code
+  No. Extension only runs packaged scripts.
+
+Data encryption in transit
+  Yes — HTTPS to Salesforce and optional AI endpoint.
+
+User controls
+  Uninstall removes extension storage. Settings can clear favorites. Destructive org
+  actions require UI confirmation.

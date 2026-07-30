@@ -1,0 +1,61 @@
+================================================================================
+Notes for Chrome Web Store reviewers — OrgKit 1.6.9
+================================================================================
+
+Single purpose
+--------------
+OrgKit is a Salesforce developer productivity extension. It helps users work in an
+org they already logged into in Chrome (SOQL/Tooling, describe/metadata including
+custom objects, Apex/flow helpers). It is not a general web scraper, ad tool, or
+credential harvester.
+
+Session model (aligned with Salesforce Inspector Reloaded)
+----------------------------------------------------------
+OrgKit reuses the browser Salesforce session cookie (sid) on Salesforce domains only,
+then calls official Salesforce REST/Tooling APIs for user-started actions.
+This is the same approach documented by Salesforce Inspector Reloaded.
+
+Lean permissions
+----------------
+Required permissions: cookies, storage.
+Host permissions: Salesforce domains only.
+Optional: OpenAI hosts if the user enables AI.
+OrgKit does NOT request tabs, activeTab, or scripting.
+
+How to test (minimum path)
+--------------------------
+1. Install the uploaded package (OrgKit 1.6.9).
+2. Sign in to any Salesforce sandbox / Developer Edition in Chrome.
+3. Open OrgKit from the toolbar icon (or Alt+Shift+O).
+4. Confirm the banner shows Session: connected for that org.
+5. SOQL runner → query a standard or custom object (e.g. SELECT Id, Name FROM Account LIMIT 5).
+6. Describe Browser → search a custom object by label or API name (__c).
+7. NL→SOQL → Tooling API → “get all flows” → Generate → Run (FlowDefinition).
+8. On a Salesforce page, use the right-edge OrgKit tab → Hide → Show restores it.
+9. Settings → Privacy Policy opens packaged privacy.html.
+
+Why cookies / host permissions are needed
+-----------------------------------------
+Salesforce REST/Tooling APIs require the user’s session. OrgKit reads the Salesforce
+sid cookie only on Salesforce-related host patterns declared in the manifest, then
+calls Salesforce HTTPS APIs for user-started actions. The sid is not stored in sync
+storage and is not sent to optional AI endpoints.
+
+Optional AI
+-----------
+Disabled by default. If enabled, the user supplies their own API key and must grant
+optional host access. Only pasted prompt text is sent — never the Salesforce sid.
+
+Destructive actions
+-------------------
+Record update/delete and inactive flow version deletion require explicit UI actions
+and confirmation. Active flow versions are never deleted by the cleaner.
+
+Screenshots in this pack
+------------------------
+Store screenshots use fictional demo org data (demo.admin@example.com / demo-org…)
+so real customer PII is not published on the listing.
+
+Contact
+-------
+Publisher contact email on the Chrome Web Store listing / GitHub: rajeevketha/chromeplugins

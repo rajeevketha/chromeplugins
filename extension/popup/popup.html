@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OrgKit</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="header">
+    <button type="button" class="icon-btn hidden" id="backBtn" title="Back">←</button>
+    <div class="brand">
+      <img src="../icons/icon32.png" alt="" width="20" height="20" />
+      <span id="headerTitle">OrgKit</span>
+    </div>
+    <button type="button" class="icon-btn" id="openOptions" title="Settings">⚙</button>
+  </header>
+
+  <section id="orgBanner" class="org-banner muted">
+    <div class="org-top">
+      <span id="envPill" class="pill">—</span>
+      <span id="orgHost" class="org-host">Open a Salesforce tab</span>
+    </div>
+    <div id="orgMeta" class="org-meta"></div>
+  </section>
+
+  <!-- HOME HUB -->
+  <section id="view-home" class="view active">
+    <p class="lede">Developer assistants for day-to-day Salesforce work.</p>
+    <div class="feature-grid" id="featureGrid"></div>
+    <div class="extras">
+      <div class="label" style="margin-top:0">Quick links &amp; utilities</div>
+      <div class="util-row">
+        <button type="button" class="btn" data-open="links">Setup links</button>
+        <button type="button" class="btn" data-open="soql-run">SOQL runner</button>
+        <button type="button" class="btn" data-open="anon-apex">Anonymous Apex</button>
+        <button type="button" class="btn" data-open="ids">ID tools</button>
+        <button type="button" class="btn" data-open="favs">Favorites</button>
+      </div>
+    </div>
+    <div class="trust-card">
+      <strong>Privacy &amp; data access</strong>
+      <ul>
+        <li>Uses your open Salesforce tab session in the browser only — OrgKit does not upload your <code>sid</code>.</li>
+        <li>What you can query or edit is whatever Salesforce allows for your user (profile, permission sets, object/field access).</li>
+        <li>Deletes and saves ask for confirmation before changing org data.</li>
+      </ul>
+      <p class="trust-links">
+        <a href="../privacy.html" target="_blank" rel="noopener">Privacy policy</a>
+        ·
+        <button type="button" class="linkish" id="homeOpenSettings">Settings</button>
+      </p>
+    </div>
+  </section>
+
+  <!-- FEATURE: NL SOQL -->
+  <section id="view-nl-soql" class="view">
+    <div class="row wrap" style="margin-bottom:8px">
+      <label class="label tight" for="nlApiMode">API</label>
+      <select id="nlApiMode" class="select" title="Standard objects / custom metadata, or Tooling API">
+        <option value="rest">Standard / CMDT</option>
+        <option value="tooling">Tooling API</option>
+      </select>
+    </div>
+    <label class="label" for="nlInput">Describe the data you need</label>
+    <textarea id="nlInput" class="textarea" rows="3" placeholder="Show recent records for an object"></textarea>
+    <p class="hint">
+      Works with standard objects, custom objects (__c), and custom metadata (__mdt). Tooling mode matches ApexClass, FlowDefinition, Flow versions, and other Tooling entities. Results respect your Salesforce permissions.
+    </p>
+    <div class="row">
+      <button type="button" class="btn primary" id="genSoql">Generate SOQL</button>
+      <button type="button" class="btn" id="runGenSoql">Run</button>
+      <button type="button" class="btn" id="copyGenSoql">Copy SOQL</button>
+    </div>
+    <pre id="nlSoqlOut" class="result"></pre>
+    <div id="nlQueryPanel" class="query-panel hidden" data-query-panel="nl">
+      <div class="query-toolbar">
+        <span class="query-meta" data-query-meta></span>
+        <button type="button" class="btn" data-export="sheets">Copy for Sheets</button>
+        <button type="button" class="btn" data-export="excel">Export Excel</button>
+        <button type="button" class="btn ghost" data-export="csv">CSV</button>
+        <button type="button" class="btn ghost" data-export="json">JSON</button>
+      </div>
+      <div class="query-table-wrap" data-query-table></div>
+    </div>
+    <div id="nlQueryStatus" class="query-status"></div>
+  </section>
+
+  <!-- FEATURE: Flow Analyzer -->
+  <section id="view-flow" class="view">
+    <div class="row">
+      <button type="button" class="btn primary" id="loadFlows">Load flows from org</button>
+      <button type="button" class="btn" id="analyzeFlowPaste">Analyze paste</button>
+    </div>
+    <textarea id="flowPaste" class="textarea" rows="4" placeholder="Optional: paste Flow JSON/XML metadata"></textarea>
+    <div id="flowOut" class="report"></div>
+  </section>
+
+  <!-- FEATURE: Governor -->
+  <section id="view-governor" class="view">
+    <div class="row wrap">
+      <button type="button" class="btn" id="loadOrgLimits">Load org limits</button>
+      <span id="orgLimitsStatus" class="hint" style="margin:0"></span>
+    </div>
+    <div id="orgLimitsOut" class="report"></div>
+    <label class="label" for="govInput">Paste Apex (or describe the transaction)</label>
+    <textarea id="govInput" class="textarea" rows="8" placeholder="for (SObject record : records) {&#10;  List&lt;SObject&gt; related = [SELECT Id FROM Related__c WHERE ParentId__c = :record.Id];&#10;}"></textarea>
+    <button type="button" class="btn primary block" id="runGovernor">Predict code limits</button>
+    <div id="govOut" class="report"></div>
+  </section>
+
+  <!-- FEATURE: Error Decoder -->
+  <section id="view-errors" class="view">
+    <label class="label" for="errInput">Paste Salesforce error</label>
+    <textarea id="errInput" class="textarea" rows="5" placeholder="System.DmlException: Update failed... UNABLE_TO_LOCK_ROW..."></textarea>
+    <div class="row">
+      <button type="button" class="btn primary" id="decodeErr">Decode</button>
+      <button type="button" class="btn" id="decodeErrAi">Decode + AI</button>
+    </div>
+    <div id="errOut" class="report"></div>
+  </section>
+
+  <!-- FEATURE: Debug Log -->
+  <section id="view-logs" class="view">
+    <label class="label" for="logInput">Paste debug log</label>
+    <textarea id="logInput" class="textarea" rows="8" placeholder="64.0 APEX_CODE,DEBUG;...&#10;Number of SOQL queries: 42 out of 100"></textarea>
+    <button type="button" class="btn primary block" id="analyzeLog">Analyze log</button>
+    <div id="logOut" class="report"></div>
+  </section>
+
+  <!-- FEATURE: Formula -->
+  <section id="view-formula" class="view">
+    <label class="label" for="formulaInput">Describe the formula</label>
+    <textarea id="formulaInput" class="textarea" rows="3" placeholder="Checkbox true when status is open or priority is high"></textarea>
+    <div class="row">
+      <button type="button" class="btn primary" id="buildFormula">Build</button>
+      <button type="button" class="btn" id="copyFormula">Copy</button>
+    </div>
+    <pre id="formulaOut" class="result"></pre>
+    <div id="formulaHelpers" class="helpers"></div>
+  </section>
+
+  <!-- FEATURE: Permissions -->
+  <section id="view-perms" class="view">
+    <label class="label" for="permUser">Username or User Id</label>
+    <input id="permUser" class="input" placeholder="user@example.com" />
+    <label class="label" for="permObject">Object API name</label>
+    <input id="permObject" class="input" list="permObjectList" placeholder="Standard or custom object API name" autocomplete="off" />
+    <datalist id="permObjectList"></datalist>
+    <p class="hint">Supports standard and custom objects (__c). Type to search the org object list.</p>
+    <button type="button" class="btn primary block" id="investigatePerms">Investigate</button>
+    <div id="permOut" class="report"></div>
+  </section>
+
+  <!-- FEATURE: Apex Review -->
+  <section id="view-apex" class="view">
+    <label class="label" for="apexClassSearch">Load class from org</label>
+    <div class="row">
+      <input type="search" id="apexClassSearch" class="input grow" placeholder="Search Apex class name…" />
+      <button type="button" class="btn" id="searchApexClasses">Search</button>
+    </div>
+    <div id="apexClassList" class="package-members"></div>
+    <div id="apexClassStatus" class="hint"></div>
+    <label class="label" for="apexInput">Apex source</label>
+    <textarea id="apexInput" class="textarea" rows="8" placeholder="Select a class above, or paste Apex here…"></textarea>
+    <button type="button" class="btn primary block" id="reviewApex">Review</button>
+    <div id="apexOut" class="report"></div>
+  </section>
+
+  <!-- FEATURE: Describe Browser -->
+  <section id="view-describe" class="view">
+    <div class="row" style="position:relative">
+      <div class="soql-editor grow" style="flex:1;min-width:0">
+        <input type="search" id="describeObjectSearch" class="input grow" list="describeObjectList" placeholder="Search standard or custom object…" autocomplete="off" style="width:100%" />
+        <div id="describeObjectSuggest" class="soql-suggest hidden" role="listbox" aria-label="Object suggestions"></div>
+      </div>
+      <button type="button" class="btn primary" id="loadDescribe">Describe</button>
+    </div>
+    <datalist id="describeObjectList"></datalist>
+    <p class="hint" id="describeObjectHint">Loads all org objects (including custom __c / __mdt). Search by API name or label.</p>
+    <input type="search" id="describeFieldFilter" class="input" placeholder="Filter fields…" style="margin-top:8px" />
+    <div id="describeSummary" class="hint"></div>
+    <div id="describeFields" class="describe-list"></div>
+    <div id="describeDetail" class="report"></div>
+    <div id="describeDependent" class="report"></div>
+  </section>
+
+  <!-- FEATURE: Metadata Quick Open -->
+  <section id="view-meta-open" class="view">
+    <label class="label" for="metaType">Type (optional)</label>
+    <select id="metaType" class="select block-select"></select>
+    <label class="label" for="metaQuery">Search name</label>
+    <div class="row">
+      <input type="search" id="metaQuery" class="input grow" placeholder="Class, flow, LWC, or other metadata name…" />
+      <button type="button" class="btn primary" id="searchMeta">Search</button>
+    </div>
+    <div id="metaResults" class="report"></div>
+  </section>
+
+  <!-- FEATURE: Package.xml Builder -->
+  <section id="view-package" class="view">
+    <p class="hint">Select metadata members, then generate a deployable <code>package.xml</code>.</p>
+    <label class="label" for="packageType">Metadata type</label>
+    <div class="row">
+      <select id="packageType" class="select grow-select"></select>
+      <button type="button" class="btn primary" id="loadPackageMembers">Load</button>
+    </div>
+    <input type="search" id="packageMemberFilter" class="input" placeholder="Filter members…" style="margin-top:8px" />
+    <div id="packageMembers" class="package-members"></div>
+    <div class="row wrap">
+      <button type="button" class="btn" id="clearPackageSel">Clear selection</button>
+      <button type="button" class="btn primary" id="genPackageXml">Generate package.xml</button>
+      <button type="button" class="btn" id="copyPackageXml">Copy</button>
+    </div>
+    <div id="packageSelection" class="hint"></div>
+    <pre id="packageXmlOut" class="result"></pre>
+  </section>
+
+  <!-- FEATURE: Inactive Flow Cleaner -->
+  <section id="view-flow-clean" class="view">
+    <p class="hint">
+      Inactive flow versions (Draft / Obsolete / InvalidDraft) often block field deletion.
+      Load them, optionally filter by field API name, then delete selected versions.
+      <strong>Active versions are never deleted.</strong>
+    </p>
+    <label class="label" for="flowCleanObject">Object API (optional)</label>
+    <input id="flowCleanObject" class="input" placeholder="MyObject__c" />
+    <label class="label" for="flowCleanField">Field API name to find in flows (optional)</label>
+    <input id="flowCleanField" class="input" placeholder="My_Field__c or MyObject__c.My_Field__c" />
+    <div class="row wrap">
+      <button type="button" class="btn primary" id="loadInactiveFlows">Load inactive versions</button>
+      <button type="button" class="btn" id="scanFlowFieldRefs">Load + scan field refs</button>
+    </div>
+    <input type="search" id="flowCleanFilter" class="input" placeholder="Filter list…" style="margin-top:8px" />
+    <div id="flowCleanList" class="package-members"></div>
+    <div class="row wrap">
+      <button type="button" class="btn" id="selectAllInactiveFlows">Select all</button>
+      <button type="button" class="btn" id="clearInactiveFlows">Clear</button>
+      <button type="button" class="btn danger" id="deleteInactiveFlows">Delete selected</button>
+    </div>
+    <div id="flowCleanStatus" class="hint"></div>
+    <div id="flowCleanOut" class="report"></div>
+  </section>
+
+  <!-- UTIL: Links -->
+  <section id="view-links" class="view">
+    <input type="search" id="linkSearch" class="input" placeholder="Filter quick links…" autocomplete="off" />
+    <div id="linkList" class="link-list"></div>
+  </section>
+
+  <!-- UTIL: SOQL runner + saved library -->
+  <section id="view-soql-run" class="view">
+    <div class="row wrap" style="margin-bottom:8px">
+      <label class="label tight" for="soqlApiMode">API</label>
+      <select id="soqlApiMode" class="select" title="Standard data objects or Tooling API metadata objects">
+        <option value="rest">Standard objects</option>
+        <option value="tooling">Tooling API</option>
+      </select>
+      <input
+        type="search"
+        id="soqlObjectHint"
+        class="input grow"
+        list="soqlObjectList"
+        placeholder="Object API name"
+        autocomplete="off"
+      />
+      <datalist id="soqlObjectList"></datalist>
+      <button type="button" class="btn" id="soqlLoadFields" title="Load fields for autocomplete">Load fields</button>
+    </div>
+    <p class="hint" id="soqlAssistHint">Field suggestions appear as you type. Standard mode includes custom objects (__c) and custom metadata (__mdt). Use Tooling for metadata entities.</p>
+    <label class="label" for="soqlInput">SOQL</label>
+    <div class="soql-editor">
+      <textarea id="soqlInput" class="textarea" rows="5" placeholder="SELECT Id, Name FROM MyObject__c LIMIT 10" spellcheck="false"></textarea>
+      <div id="soqlSuggest" class="soql-suggest hidden" role="listbox" aria-label="Field suggestions"></div>
+    </div>
+    <div class="row wrap">
+      <select id="apiVersion" class="select" title="API version"></select>
+      <button type="button" class="btn primary" id="runSoql">Run query</button>
+      <button type="button" class="btn" id="saveSoqlBtn">Save to library</button>
+    </div>
+    <div class="row wrap">
+      <input type="text" id="soqlSaveName" class="input grow" placeholder="Name for saved query" maxlength="80" />
+    </div>
+    <div id="soqlQueryPanel" class="query-panel hidden" data-query-panel="soql">
+      <div class="query-toolbar">
+        <span class="query-meta" data-query-meta></span>
+        <button type="button" class="btn" data-export="sheets">Copy for Sheets</button>
+        <button type="button" class="btn" data-export="excel">Export Excel</button>
+        <button type="button" class="btn ghost" data-export="csv">CSV</button>
+        <button type="button" class="btn ghost" data-export="json">JSON</button>
+      </div>
+      <div class="query-table-wrap" data-query-table></div>
+    </div>
+    <div id="soqlQueryStatus" class="query-status"></div>
+
+    <div class="label">Saved SOQL library</div>
+    <p class="hint" id="soqlLibraryHint">Pinned and recent queries for this org. Stored locally in the browser — never includes session.</p>
+    <input type="search" id="soqlLibraryFilter" class="input" placeholder="Filter saved queries…" />
+    <div id="soqlLibraryList" class="package-members"></div>
+  </section>
+
+  <!-- FEATURE: Anonymous Apex -->
+  <section id="view-anon-apex" class="view">
+    <p class="hint">
+      Runs Apex with your current org session via Tooling <code>executeAnonymous</code>.
+      Debug lines need an active Trace Flag; then use Fetch debug log.
+    </p>
+    <label class="label" for="apexSnippet">Snippet</label>
+    <select id="apexSnippet" class="select block-select"></select>
+    <label class="label" for="anonApexInput">Anonymous Apex</label>
+    <textarea id="anonApexInput" class="textarea" rows="10" placeholder="System.debug('hello');"></textarea>
+    <div class="row wrap">
+      <button type="button" class="btn primary" id="runAnonApex">Execute</button>
+      <button type="button" class="btn" id="fetchAnonDebug">Fetch debug log</button>
+      <button type="button" class="btn ghost" id="copyAnonApex">Copy Apex</button>
+    </div>
+    <div id="anonApexResult" class="report"></div>
+    <pre id="anonApexDebug" class="result dim"></pre>
+  </section>
+
+  <!-- UTIL: IDs -->
+  <section id="view-ids" class="view">
+    <div class="row">
+      <input type="text" id="idInput" class="input grow" placeholder="001…" spellcheck="false" />
+      <button type="button" class="btn primary" id="openRecord">Open</button>
+    </div>
+    <div id="idInfo" class="id-info"></div>
+    <div class="row wrap">
+      <button type="button" class="btn" id="copy15">Copy 15</button>
+      <button type="button" class="btn" id="copy18">Copy 18</button>
+      <button type="button" class="btn" id="scanPageIds">Scan page</button>
+    </div>
+    <ul id="scannedIds" class="scanned"></ul>
+  </section>
+
+  <!-- UTIL: Favs -->
+  <section id="view-favs" class="view">
+    <div class="row"><input type="text" id="favLabel" class="input grow" placeholder="Label" /></div>
+    <div class="row">
+      <input type="text" id="favPath" class="input grow" placeholder="Path or full URL" />
+      <button type="button" class="btn primary" id="addFav">Add</button>
+    </div>
+    <ul id="favList" class="fav-list"></ul>
+    <button type="button" class="btn block" id="saveCurrent">Save current page</button>
+  </section>
+
+  <!-- Record detail / edit drawer -->
+  <div id="recordDrawer" class="record-drawer hidden" aria-hidden="true">
+    <div class="record-drawer-backdrop" data-record-close></div>
+    <div class="record-drawer-panel" role="dialog" aria-labelledby="recordDrawerTitle">
+      <div class="record-drawer-header">
+        <div>
+          <div class="label" id="recordDrawerTitle">Record</div>
+          <div class="hint" id="recordDrawerSub"></div>
+        </div>
+        <button type="button" class="btn ghost" data-record-close title="Close">Close</button>
+      </div>
+      <div class="record-drawer-actions row wrap">
+        <button type="button" class="btn" id="recordOpenSf">Open in Salesforce</button>
+        <button type="button" class="btn primary" id="recordSave">Save changes</button>
+        <button type="button" class="btn danger" id="recordDelete">Delete</button>
+      </div>
+      <div id="recordDrawerStatus" class="query-status"></div>
+      <input type="search" id="recordFieldFilter" class="input" placeholder="Filter fields…" />
+      <div id="recordFieldList" class="record-field-list"></div>
+    </div>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

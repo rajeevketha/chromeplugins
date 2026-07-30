@@ -1,0 +1,139 @@
+.orgkit-badge {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483645;
+  padding: 3px 12px 4px;
+  border-radius: 0 0 8px 8px;
+  font: 700 11px/1.2 "Segoe UI", "Helvetica Neue", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.orgkit-badge.prod { background: #2e844a; }
+.orgkit-badge.sandbox { background: #dd7a01; }
+.orgkit-badge.deved { background: #0176d3; }
+
+/* Slim right-edge tab — minimal footprint */
+.orgkit-side-tab {
+  position: fixed;
+  top: 42%;
+  right: 0;
+  z-index: 2147483646;
+  width: 22px;
+  padding: 14px 0;
+  border: 1px solid rgba(1, 118, 211, 0.55);
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+  background: #0176d3;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: -2px 2px 10px rgba(0, 0, 0, 0.25);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font: 700 11px/1 "Segoe UI", "Helvetica Neue", sans-serif;
+  letter-spacing: 0.08em;
+}
+.orgkit-side-tab span {
+  display: inline-block;
+  transform: rotate(180deg);
+}
+.orgkit-side-tab:hover,
+.orgkit-side-tab.is-open {
+  background: #014486;
+  width: 24px;
+}
+/* Slim restore control after Hide — always keeps on-page access */
+.orgkit-restore-tab {
+  background: #1c3552;
+  border-color: rgba(143, 166, 193, 0.55);
+  width: 20px;
+  padding: 10px 0;
+  opacity: 0.92;
+}
+.orgkit-restore-tab:hover {
+  background: #0176d3;
+  border-color: rgba(1, 118, 211, 0.55);
+  width: 22px;
+  opacity: 1;
+}
+
+.orgkit-side-panel {
+  position: fixed;
+  top: 38%;
+  right: 26px;
+  z-index: 2147483646;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 132px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(15, 28, 46, 0.96);
+  border: 1px solid rgba(42, 74, 107, 0.95);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.orgkit-side-panel[hidden] {
+  display: none !important;
+}
+.orgkit-side-panel button {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1c3552;
+  color: #e8eef6;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font: 600 12px/1.2 "Segoe UI", "Helvetica Neue", sans-serif;
+  cursor: pointer;
+  text-align: left;
+}
+.orgkit-side-panel button:hover {
+  background: #0176d3;
+  border-color: #0176d3;
+}
+.orgkit-side-panel button[data-action="orgkit"] {
+  background: #0176d3;
+  border-color: #0176d3;
+  font-weight: 700;
+}
+.orgkit-side-panel button.orgkit-muted {
+  background: transparent;
+  color: #8fa6c1;
+  border-color: transparent;
+}
+
+.orgkit-id-tip {
+  position: fixed;
+  right: 36px;
+  bottom: 24px;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #0f1c2e;
+  color: #e8eef6;
+  border: 1px solid #2a4a6b;
+  font: 12px/1.3 "Segoe UI", "Helvetica Neue", sans-serif;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+.orgkit-id-tip code {
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  color: #9ec9ff;
+}
+.orgkit-id-tip button {
+  border: 0;
+  border-radius: 4px;
+  background: #0176d3;
+  color: #fff;
+  padding: 4px 8px;
+  font: 600 11px/1 "Segoe UI", sans-serif;
+  cursor: pointer;
+}

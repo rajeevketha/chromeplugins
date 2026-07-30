@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OrgKit Privacy Policy</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --text: #15202b;
+      --muted: #4a5d73;
+      --border: #d7e0ea;
+      --bg: #f7fafc;
+      --card: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text: #e8eef6;
+        --muted: #9bb0c7;
+        --border: #2a4a6b;
+        --bg: #0b1624;
+        --card: #122033;
+      }
+    }
+    body {
+      margin: 0;
+      font: 15px/1.55 system-ui, -apple-system, Segoe UI, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px 18px 48px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+    }
+    h1 { font-size: 1.55rem; margin: 0 0 6px; }
+    h2 { font-size: 1.1rem; margin: 1.4rem 0 0.45rem; }
+    p, li { color: var(--text); }
+    .muted { color: var(--muted); }
+    ul { padding-left: 1.2rem; }
+    a { color: #1b6fd6; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h1>OrgKit Privacy Policy</h1>
+      <p class="muted">Last updated: 30 July 2026 · Applies to the OrgKit Chrome extension</p>
+
+      <h2>Summary</h2>
+      <p>
+        OrgKit is a Salesforce developer toolkit that runs in your browser.
+        It uses your <strong>already open Salesforce tab session</strong> to call Salesforce APIs
+        for actions you start. OrgKit does not operate a backend that collects your
+        org data, and it does not sell personal information.
+      </p>
+
+      <h2>Data OrgKit accesses</h2>
+      <ul>
+        <li>
+          <strong>Salesforce session cookie (<code>sid</code>)</strong> — read only on Salesforce-related
+          domains so the extension can call Salesforce REST/Tooling APIs as you. The cookie is used
+          in-browser as an Authorization bearer token and is <strong>never logged</strong> or written
+          to extension sync storage.
+        </li>
+        <li>
+          <strong>Salesforce org data you request</strong> — for example SOQL results, object describes,
+          Apex class bodies, flow metadata — shown in the extension UI and optionally exported by you
+          (CSV/Excel/JSON). This data is not uploaded to OrgKit servers (there are none).
+        </li>
+        <li>
+          <strong>Settings &amp; library items</strong> — favorites, API version, UI toggles, saved SOQL
+          names/queries, optional AI settings. Stored in Chrome extension storage on your device/profile.
+          Saved SOQL never includes your session id.
+        </li>
+        <li>
+          <strong>Optional AI provider</strong> — only if you enable AI and provide your own API key.
+          Then the text you paste into NL→SOQL / Formula / Error / Apex Review may be sent to the
+          OpenAI-compatible endpoint you configure. Salesforce session cookies are stripped from prompts
+          and are not sent to the AI provider.
+        </li>
+      </ul>
+
+      <h2>Permissions (why they exist)</h2>
+      <ul>
+        <li><strong>cookies</strong> — read Salesforce <code>sid</code> on Salesforce domains only (same session model as tools like Salesforce Inspector Reloaded).</li>
+        <li><strong>storage</strong> — settings, favorites, saved queries, optional AI key (local). Never stores <code>sid</code>.</li>
+        <li><strong>Host access to Salesforce domains</strong> — call Salesforce APIs and show the on-page OrgKit launcher on Salesforce pages only.</li>
+        <li><strong>Optional OpenAI hosts</strong> — only after you enable AI and grant access.</li>
+      </ul>
+
+      <h2>What we do not do</h2>
+      <ul>
+        <li>No analytics SDKs, ad networks, or third-party trackers in the extension.</li>
+        <li>No sale of personal or org data.</li>
+        <li>No transmission of <code>sid</code> to non-Salesforce destinations.</li>
+        <li>No remote code execution; the extension only runs its packaged scripts.</li>
+      </ul>
+
+      <h2>Destructive actions</h2>
+      <p>
+        Features that update or delete Salesforce records (for example All data Save/Delete, inactive
+        flow version deletion) run only after an explicit action in the UI and, for deletes, a confirmation
+        dialog. OrgKit cannot delete Active flow versions via the cleaner.
+      </p>
+
+      <h2>Data retention</h2>
+      <p>
+        Data remains in your browser profile until you clear extension storage, remove the extension,
+        or delete saved items. Uninstalling OrgKit removes its extension storage.
+      </p>
+
+      <h2>Children</h2>
+      <p>OrgKit is intended for professional Salesforce developers and administrators, not for children.</p>
+
+      <h2>Changes</h2>
+      <p>We may update this policy when the extension’s data practices change. The “Last updated” date will change accordingly.</p>
+
+      <h2>Contact</h2>
+      <p class="muted">
+        For privacy questions about OrgKit, contact the publisher listed on the Chrome Web Store listing
+        (or the repository maintainer if you installed from source).
+      </p>
+    </div>
+  </main>
+</body>
+</html>

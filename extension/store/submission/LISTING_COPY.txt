@@ -1,0 +1,70 @@
+================================================================================
+Chrome Web Store — OrgKit listing copy (paste into Developer Dashboard)
+Version covered: 1.6.9
+================================================================================
+
+LANGUAGE
+  English (United States)
+
+CATEGORY
+  Productivity
+  (Secondary/tags if asked: Developer Tools, Salesforce)
+
+================================================================================
+SHORT DESCRIPTION  (max 132 characters — count carefully)
+================================================================================
+
+Salesforce developer toolkit: SOQL, schema, Apex, flows. Uses your open org tab session in-browser only.
+
+Character count: 108
+
+================================================================================
+DETAILED DESCRIPTION
+================================================================================
+
+OrgKit is a productivity toolkit for Salesforce developers and admins.
+
+What it does
+• SOQL / Tooling runner with field autocomplete and a saved query library
+• Open query results in Lightning; show all data to view fields; update/delete with confirmation
+• Describe browser for standard and custom objects (fields + dependent picklists)
+• Metadata quick open, package.xml builder
+• Inactive flow version cleaner (Active versions are never deleted)
+• NL→SOQL for standard objects, custom objects, custom metadata, and Tooling entities
+• Apex review, governor heuristics, error/log helpers, permission investigator
+
+How authentication works
+OrgKit does not ask you to type a password into the extension. It uses the Salesforce session cookie from a Salesforce tab you already logged into in Chrome, only to call Salesforce APIs for actions you start. The session stays in your browser. This is the same session model used by tools such as Salesforce Inspector Reloaded.
+
+Privacy & permissions
+• No OrgKit backend collecting org data
+• Session id is not written to sync storage and is not sent to AI providers
+• Optional AI sends only the text you paste, to the endpoint you configure
+• Full policy: open extension Settings → Privacy Policy (privacy.html in the package)
+
+Permissions (summary)
+• cookies — Salesforce sid on Salesforce domains only
+• storage — settings, favorites, saved SOQL (never stores sid)
+• Host permissions — Salesforce domains only; OpenAI hosts are optional
+• Does not request tabs, activeTab, or scripting
+
+================================================================================
+SINGLE PURPOSE
+================================================================================
+
+OrgKit helps Salesforce developers work in their open org: run SOQL/Tooling queries, inspect schema/metadata (including custom objects), review Apex/flows, and open records — using the browser Salesforce session already available in a logged-in tab.
+
+================================================================================
+PRIVACY POLICY URL
+================================================================================
+
+Host extension/privacy.html on a public HTTPS URL, then paste that URL here.
+
+Recommended options:
+1) GitHub Pages on rajeevketha/chromeplugins
+2) Any public HTTPS page that mirrors privacy.html
+
+Do NOT paste a file:// or chrome-extension:// URL — the Store requires a public https:// page.
+
+A ready-to-host copy is included in this pack:
+  privacy.html

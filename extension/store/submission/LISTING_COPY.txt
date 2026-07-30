@@ -1,6 +1,6 @@
 ================================================================================
 Chrome Web Store — OrgKit listing copy (paste into Developer Dashboard)
-Version covered: 1.6.9
+Version covered: 1.7.0
 ================================================================================
 
 LANGUAGE
@@ -40,7 +40,7 @@ Privacy & permissions
 • No OrgKit backend collecting org data
 • Session id is not written to sync storage and is not sent to AI providers
 • Optional AI sends only the text you paste, to the endpoint you configure
-• Full policy: open extension Settings → Privacy Policy (privacy.html in the package)
+• Full policy: https://rajeevketha.github.io/chromeplugins/extension/privacy.html
 
 Permissions (summary)
 • cookies — Salesforce sid on Salesforce domains only
@@ -58,17 +58,4 @@ OrgKit helps Salesforce developers work in their open org: run SOQL/Tooling quer
 PRIVACY POLICY URL
 ================================================================================
 
-Host extension/privacy.html on a public HTTPS URL, then paste that URL here.
-
-Intended GitHub Pages URL (after repo is Public + Pages enabled on main):
-  https://rajeevketha.github.io/chromeplugins/extension/privacy.html
-
-main already contains privacy.html. Enable Pages:
-  Repo Settings → Pages → Deploy from a branch → main → / (root)
-
-If the repo stays private, host privacy.html elsewhere on public HTTPS.
-
-Do NOT paste a file:// or chrome-extension:// URL — the Store requires a public https:// page.
-
-A ready-to-host copy is included in this pack:
-  privacy.html
+https://rajeevketha.github.io/chromeplugins/extension/privacy.html

@@ -1,26 +1,15 @@
-# Chrome Web Store — OrgKit
+# Chrome Web Store — OrgKit 1.7.0
 
-**Full submission pack (copy, screenshots, promo, checklist):**  
-[`extension/store/submission/`](./submission/)
-
-**Upload package:**
-
-```bash
-cd extension && zip -r ../OrgKit-1.6.9-store.zip . \
-  -x '*.DS_Store' -x 'store/submission/screenshots/*' -x 'store/submission/promo/*'
-```
-
-Or use the prebuilt `OrgKit-1.6.9-store.zip` in agent Files / `OrgKit-CWS-1.6.9/`.
-
-Privacy policy source: [`../privacy.html`](../privacy.html)  
-Packaged hostable copy: [`submission/privacy.html`](./submission/privacy.html)
+**Submission pack:** [`extension/store/submission/`](./submission/)  
+**Upload zip:** `OrgKit-1.7.0-store.zip`  
+**Privacy:** https://rajeevketha.github.io/chromeplugins/extension/privacy.html  
 
 Start with [`submission/SUBMIT_CHECKLIST.md`](./submission/SUBMIT_CHECKLIST.md).
 
-## Current submission snapshot (1.6.9)
+## Snapshot
 
-- MV3; required permissions: `cookies`, `storage`
-- Salesforce host permissions only; OpenAI optional
-- No `tabs` / `activeTab` / `scripting`
+- MV3 · version **1.7.0**
+- Permissions: `cookies`, `storage` (+ Salesforce hosts; OpenAI optional)
+- UI: `app/index.html`
 - Custom objects searchable in Describe / SOQL / Permissions
-- Deploy Readiness feature removed
+- Deploy Readiness removed

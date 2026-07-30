@@ -1591,7 +1591,14 @@ function showFieldDetail(fieldName) {
         <button type="button" class="btn" id="copyFieldApi">Copy API name</button>
       </div>
       <p>${escapeHtml(field.label)} · ${escapeHtml(field.type)} · custom:${field.custom} · nillable:${field.nillable} · create:${field.createable} · update:${field.updateable}</p>
-      ${field.controllerName ? `<p>Controller: <code>${escapeHtml(field.controllerName)}</code></p>` : ""}
+      ${
+        field.controllerName
+          ? (() => {
+              const ctrl = state.describeFields.find((f) => f.name === field.controllerName);
+              return `<p>Depends on controlling field: <strong>${escapeHtml(ctrl?.label || field.controllerName)}</strong> <code>${escapeHtml(field.controllerName)}</code></p>`;
+            })()
+          : ""
+      }
       ${field.relationshipName ? `<p>Relationship: <code>${escapeHtml(field.relationshipName)}</code></p>` : ""}
       ${picks}
     </div>`;
@@ -1602,28 +1609,38 @@ function showFieldDetail(fieldName) {
   if (field.dependentPicklist && field.controllerName) {
     const controller = state.describeFields.find((f) => f.name === field.controllerName);
     if (controller) {
-      const map = buildDependentMap(controller, field);
-      renderDependentInteractive(map);
+      const pairs = findDependentPairs(state.describeFields || []);
+      const idx = pairs.findIndex((p) => p.dependent.name === field.name);
+      const pairSel = $("#depPairSelect");
+      if (pairSel && idx >= 0) pairSel.value = String(idx);
+      renderDependentInteractive(buildDependentMap(controller, field));
     }
   }
+}
+
+function fieldDisplayName(field) {
+  if (!field) return "";
+  const label = field.label || field.name;
+  return label === field.name ? field.name : `${label} (${field.name})`;
 }
 
 function renderDependentPicker(fields) {
   const pairs = findDependentPairs(fields);
   if (!pairs.length) {
-    $("#describeDependent").innerHTML = `<div class="hint">No dependent picklists on this object.</div>`;
+    $("#describeDependent").innerHTML = `<div class="hint">No field dependencies (dependent picklists) on this object.</div>`;
     return;
   }
   $("#describeDependent").innerHTML = `
-    <div class="summary-bar">Dependent picklists (${pairs.length})</div>
-    <label class="label" for="depPairSelect">Pair</label>
+    <div class="summary-bar">Field dependencies (${pairs.length})</div>
+    <p class="hint dep-intro">Shows which dependent picklist options are available for each controlling value — same idea as Setup → Object Manager → Fields → Field Dependencies.</p>
+    <label class="label" for="depPairSelect">Dependency</label>
     <select id="depPairSelect" class="select block-select"></select>
     <div id="depInteractive"></div>`;
   const sel = $("#depPairSelect");
   pairs.forEach((p, i) => {
     const opt = document.createElement("option");
     opt.value = String(i);
-    opt.textContent = `${p.controller.name} → ${p.dependent.name}`;
+    opt.textContent = `${fieldDisplayName(p.controller)} → ${fieldDisplayName(p.dependent)}`;
     sel.appendChild(opt);
   });
   const render = () => {
@@ -1637,24 +1654,72 @@ function renderDependentPicker(fields) {
 function renderDependentInteractive(map) {
   const host = $("#depInteractive") || $("#describeDependent");
   if (!map) return;
+  const controllerTitle = map.controllerLabel || map.controllerName;
+  const dependentTitle = map.dependentLabel || map.dependentName;
   host.innerHTML = `
-    <label class="label" for="depControllerValue">Controlling value (${escapeHtml(map.controllerName)})</label>
-    <select id="depControllerValue" class="select block-select"></select>
-    <div id="depValuesOut" class="finding info"></div>`;
+    <div class="dep-panel">
+      <div class="dep-map" aria-label="Controlling and dependent fields">
+        <div class="dep-field">
+          <span class="dep-role">Controlling field</span>
+          <strong>${escapeHtml(controllerTitle)}</strong>
+          <code>${escapeHtml(map.controllerName)}</code>
+        </div>
+        <div class="dep-arrow" aria-hidden="true">→</div>
+        <div class="dep-field">
+          <span class="dep-role">Dependent field</span>
+          <strong>${escapeHtml(dependentTitle)}</strong>
+          <code>${escapeHtml(map.dependentName)}</code>
+        </div>
+      </div>
+      <label class="label" for="depControllerValue">When <strong>${escapeHtml(controllerTitle)}</strong> equals</label>
+      <select id="depControllerValue" class="select block-select"></select>
+      <div id="depValuesOut" class="dep-result"></div>
+    </div>`;
   const sel = $("#depControllerValue");
   map.controllerValues.forEach((v) => {
     const opt = document.createElement("option");
     opt.value = v.value;
-    opt.textContent = `${v.label} (${v.value})`;
+    opt.textContent = v.label === v.value ? v.label : `${v.label}  ·  ${v.value}`;
     sel.appendChild(opt);
   });
   const paint = () => {
     const vals = map.byController[sel.value] || [];
-    $("#depValuesOut").innerHTML = vals.length
-      ? `<strong>Controlled values for <code>${escapeHtml(sel.value)}</code> on ${escapeHtml(map.dependentName)}</strong>
-         <ul>${vals.map((v) => `<li><code>${escapeHtml(v.value)}</code> — ${escapeHtml(v.label)}</li>`).join("")}</ul>
-         <button type="button" class="btn" id="copyDepValues">Copy values</button>`
-      : `<p>No active dependent values for this controlling value.</p>`;
+    const controlling = map.controllerValues.find((v) => v.value === sel.value);
+    const controllingLabel = controlling?.label || sel.value;
+    const out = $("#depValuesOut");
+    if (!vals.length) {
+      out.innerHTML = `<p class="dep-empty">No active options on <strong>${escapeHtml(dependentTitle)}</strong> when <strong>${escapeHtml(controllerTitle)}</strong> is <em>${escapeHtml(controllingLabel)}</em>.</p>`;
+      return;
+    }
+    out.innerHTML = `
+      <p class="dep-result-title">Then <strong>${escapeHtml(dependentTitle)}</strong> can be one of these <span class="dep-count">${vals.length}</span></p>
+      <div class="dep-table-wrap">
+        <table class="dep-table">
+          <thead>
+            <tr>
+              <th scope="col">Label (what users see)</th>
+              <th scope="col">API value</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${vals
+              .map(
+                (v) => `<tr>
+              <td>${escapeHtml(v.label)}</td>
+              <td><code>${escapeHtml(v.value)}</code></td>
+            </tr>`
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="row wrap dep-actions">
+        <button type="button" class="btn" id="copyDepLabels">Copy labels</button>
+        <button type="button" class="btn" id="copyDepValues">Copy API values</button>
+      </div>`;
+    $("#copyDepLabels")?.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(vals.map((v) => v.label).join("\n"));
+    });
     $("#copyDepValues")?.addEventListener("click", async () => {
       await navigator.clipboard.writeText(vals.map((v) => v.value).join("\n"));
     });

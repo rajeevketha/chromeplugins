@@ -44,7 +44,9 @@ export function buildDependentMap(controllerField, dependentField) {
   }
   return {
     controllerName: controllerField?.name,
+    controllerLabel: controllerField?.label || controllerField?.name || "",
     dependentName: dependentField?.name,
+    dependentLabel: dependentField?.label || dependentField?.name || "",
     controllerValues: controllerValues.map((v) => ({ value: v.value, label: v.label })),
     byController: map
   };

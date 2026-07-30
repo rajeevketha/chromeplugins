@@ -3,3 +3,10 @@ node_modules/
 *.log
 .chrome-profile/
 dist/
+
+# Local validation packages (do not commit)
+OrgKit-local/
+OrgKit/
+*.zip
+orgkit-*.zip
+sf-dev-toolkit-*.zip

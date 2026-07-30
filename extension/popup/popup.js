@@ -9,6 +9,7 @@ import {
 import { generateSoql } from "../lib/nl-soql.js";
 import { analyzeFlow } from "../lib/flow-analyzer.js";
 import { predictGovernorLimits } from "../lib/governor.js";
+import { summarizeOrgLimits } from "../lib/org-limits.js";
 import { decodeError, decodeErrorWithAi } from "../lib/error-decoder.js";
 import { analyzeDebugLog } from "../lib/debug-log.js";
 import { buildFormula, FORMULA_HELPERS } from "../lib/formula-builder.js";
@@ -112,7 +113,9 @@ const state = {
   inactiveFlows: [],
   inactiveFlowSelected: [],
   soqlLibrary: [],
-  editingSoqlId: null
+  editingSoqlId: null,
+  apexClassResults: [],
+  orgLimits: null
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -138,7 +141,8 @@ async function init() {
   await loadDeployChecklist();
   await refreshOrg();
   await refreshSoqlLibrary();
-  showView("home");
+  const deepView = new URLSearchParams(location.search).get("view");
+  showView(deepView && TITLES[deepView] ? deepView : "home");
 }
 
 /**
@@ -189,6 +193,12 @@ function showView(id) {
   if (id === "soql-run") {
     refreshSoqlLibrary().catch(() => {});
   }
+  if (id === "governor" && !state.orgLimits) {
+    loadOrgLimits().catch(() => {});
+  }
+  if (id === "apex" && !state.apexClassResults.length) {
+    searchApexClasses("").catch(() => {});
+  }
 }
 
 function bindFeatureActions() {
@@ -206,6 +216,7 @@ function bindFeatureActions() {
   $("#runGovernor").addEventListener("click", () => {
     renderGovernor(predictGovernorLimits($("#govInput").value));
   });
+  $("#loadOrgLimits").addEventListener("click", () => loadOrgLimits());
 
   $("#decodeErr").addEventListener("click", () => renderError(decodeError($("#errInput").value)));
   $("#decodeErrAi").addEventListener("click", async () => {
@@ -225,6 +236,10 @@ function bindFeatureActions() {
 
   $("#investigatePerms").addEventListener("click", onInvestigatePerms);
   $("#reviewApex").addEventListener("click", onReviewApex);
+  $("#searchApexClasses").addEventListener("click", () => searchApexClasses($("#apexClassSearch").value));
+  $("#apexClassSearch").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") searchApexClasses($("#apexClassSearch").value);
+  });
 
   $("#loadDescribe").addEventListener("click", onLoadDescribe);
   $("#describeFieldFilter").addEventListener("input", () => renderDescribeFields());
@@ -948,6 +963,125 @@ async function onReviewApex() {
   } catch (e) {
     $("#apexOut").innerHTML = `<div class="finding high"><p>${escapeHtml(e.message)}</p></div>`;
   }
+}
+
+async function searchApexClasses(query) {
+  const status = $("#apexClassStatus");
+  const root = $("#apexClassList");
+  if (status) status.textContent = "Loading Apex classes…";
+  if (root) root.innerHTML = `<div class="query-empty">Loading…</div>`;
+  try {
+    await ensureSalesforceSiteAccess();
+    const res = await send("listApexClasses", {
+      tabUrl: await requireTabUrl(),
+      query: query || "",
+      apiVersion: apiVersion()
+    });
+    if (!res.ok) throw new Error(res.error);
+    state.apexClassResults = res.result.records || [];
+    renderApexClassList();
+    if (status) {
+      status.textContent = `Loaded ${state.apexClassResults.length} class(es)${query ? ` for “${query}”` : ""}.`;
+    }
+  } catch (e) {
+    state.apexClassResults = [];
+    if (root) root.innerHTML = "";
+    if (status) status.textContent = e.message;
+  }
+}
+
+function renderApexClassList() {
+  const root = $("#apexClassList");
+  if (!root) return;
+  root.replaceChildren();
+  if (!state.apexClassResults.length) {
+    const empty = document.createElement("div");
+    empty.className = "query-empty";
+    empty.textContent = "No Apex classes found.";
+    root.appendChild(empty);
+    return;
+  }
+  for (const row of state.apexClassResults) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "describe-item";
+    const ns = row.namespace ? `${row.namespace}.` : "";
+    btn.innerHTML = `<strong>${escapeHtml(ns + row.name)}</strong>
+      <span>${escapeHtml(row.lastModifiedDate || "")}${row.apiVersion != null ? ` · API ${escapeHtml(String(row.apiVersion))}` : ""}</span>`;
+    btn.addEventListener("click", () => loadApexClassForReview(row.id, ns + row.name));
+    root.appendChild(btn);
+  }
+}
+
+async function loadApexClassForReview(id, label) {
+  const status = $("#apexClassStatus");
+  if (status) status.textContent = `Loading ${label}…`;
+  try {
+    await ensureSalesforceSiteAccess();
+    const res = await send("getApexClassBody", {
+      tabUrl: await requireTabUrl(),
+      id,
+      apiVersion: apiVersion()
+    });
+    if (!res.ok) throw new Error(res.error);
+    $("#apexInput").value = res.result.body || "";
+    if (status) status.textContent = `Loaded ${res.result.name} (${(res.result.body || "").length} chars). Click Review.`;
+    $("#apexOut").innerHTML = "";
+  } catch (e) {
+    if (status) status.textContent = e.message;
+  }
+}
+
+async function loadOrgLimits() {
+  const status = $("#orgLimitsStatus");
+  const out = $("#orgLimitsOut");
+  if (status) status.textContent = "Loading org limits…";
+  try {
+    await ensureSalesforceSiteAccess();
+    const res = await send("getOrgLimits", {
+      tabUrl: await requireTabUrl(),
+      apiVersion: apiVersion()
+    });
+    if (!res.ok) throw new Error(res.error);
+    state.orgLimits = res.result;
+    const summary = summarizeOrgLimits(res.result);
+    renderOrgLimits(summary);
+    if (status) status.textContent = summary.summary;
+  } catch (e) {
+    state.orgLimits = null;
+    if (out) out.innerHTML = `<div class="finding high"><p>${escapeHtml(e.message)}</p></div>`;
+    if (status) status.textContent = e.message;
+  }
+}
+
+function renderOrgLimits(summary) {
+  const out = $("#orgLimitsOut");
+  if (!out) return;
+  // Show preferred limits first; keep list readable (top 18 by risk then name)
+  const rows = [...summary.rows].sort((a, b) => {
+    const rank = { critical: 0, high: 1, medium: 2, low: 3 };
+    const d = (rank[a.risk] ?? 9) - (rank[b.risk] ?? 9);
+    if (d !== 0) return d;
+    return a.label.localeCompare(b.label);
+  }).slice(0, 18);
+
+  out.innerHTML =
+    `<div class="summary-bar">${escapeHtml(summary.summary)}</div>` +
+    rows
+      .map((r) => {
+        const usedLabel =
+          r.used != null && r.remaining != null
+            ? `${r.used.toLocaleString()} / ${r.max.toLocaleString()} used · ${r.remaining.toLocaleString()} left`
+            : `Max ${r.max.toLocaleString()}`;
+        const pct = r.pct != null ? `${r.pct}%` : "";
+        return `<div class="finding ${r.risk}">
+          <div class="meter ${r.risk}"><span>${escapeHtml(r.label)}</span>
+          <div class="bar"><i style="width:${Math.min(r.pct || 0, 100)}%"></i></div>
+          <span>${escapeHtml(pct)}</span></div>
+          <p>${escapeHtml(usedLabel)}</p>
+        </div>`;
+      })
+      .join("");
 }
 
 /* —— Describe / Metadata / Package.xml —— */

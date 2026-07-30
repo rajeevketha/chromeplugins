@@ -59,6 +59,17 @@
   border-color: #0176d3;
 }
 
+.sfdev-toolbar button[data-action="orgkit"] {
+  background: #0176d3;
+  border-color: #0176d3;
+  color: #fff;
+  font-weight: 700;
+}
+.sfdev-toolbar button[data-action="orgkit"]:hover {
+  background: #1b96ff;
+  border-color: #1b96ff;
+}
+
 .sfdev-id-tip {
   position: fixed;
   right: 12px;

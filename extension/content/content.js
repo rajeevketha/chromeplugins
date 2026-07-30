@@ -84,6 +84,7 @@
     bar.id = "sfdev-toolbar";
     bar.className = "sfdev-toolbar";
     bar.innerHTML = `
+      <button type="button" data-action="orgkit" title="Open OrgKit">OrgKit</button>
       <button type="button" data-action="setup" title="Setup">Setup</button>
       <button type="button" data-action="objects" title="Object Manager">Objects</button>
       <button type="button" data-action="logs" title="Debug Logs">Logs</button>
@@ -130,6 +131,10 @@
     if (action === "hide") {
       await chrome.storage.sync.set({ showToolbar: false });
       state.toolbar?.remove();
+      return;
+    }
+    if (action === "orgkit") {
+      await chrome.runtime.sendMessage({ type: "openOrgKit" });
       return;
     }
     if (action === "copy-url") {

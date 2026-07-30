@@ -75,9 +75,14 @@
 
   <!-- FEATURE: Governor -->
   <section id="view-governor" class="view">
+    <div class="row wrap">
+      <button type="button" class="btn" id="loadOrgLimits">Load org limits</button>
+      <span id="orgLimitsStatus" class="hint" style="margin:0"></span>
+    </div>
+    <div id="orgLimitsOut" class="report"></div>
     <label class="label" for="govInput">Paste Apex (or describe the transaction)</label>
     <textarea id="govInput" class="textarea" rows="8" placeholder="for (Account a : accounts) {&#10;  List&lt;Contact&gt; c = [SELECT Id FROM Contact WHERE AccountId = :a.Id];&#10;}"></textarea>
-    <button type="button" class="btn primary block" id="runGovernor">Predict limits</button>
+    <button type="button" class="btn primary block" id="runGovernor">Predict code limits</button>
     <div id="govOut" class="report"></div>
   </section>
 
@@ -135,8 +140,15 @@
 
   <!-- FEATURE: Apex Review -->
   <section id="view-apex" class="view">
-    <label class="label" for="apexInput">Paste Apex</label>
-    <textarea id="apexInput" class="textarea" rows="8" placeholder="public without sharing class MyService { ... }"></textarea>
+    <label class="label" for="apexClassSearch">Load class from org</label>
+    <div class="row">
+      <input type="search" id="apexClassSearch" class="input grow" placeholder="Search Apex class name…" />
+      <button type="button" class="btn" id="searchApexClasses">Search</button>
+    </div>
+    <div id="apexClassList" class="package-members"></div>
+    <div id="apexClassStatus" class="hint"></div>
+    <label class="label" for="apexInput">Apex source</label>
+    <textarea id="apexInput" class="textarea" rows="8" placeholder="Select a class above, or paste Apex here…"></textarea>
     <button type="button" class="btn primary block" id="reviewApex">Review</button>
     <div id="apexOut" class="report"></div>
   </section>

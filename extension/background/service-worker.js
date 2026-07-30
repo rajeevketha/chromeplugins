@@ -26,6 +26,11 @@ chrome.runtime.onInstalled.addListener(() => {
   );
 });
 
+/** Toolbar icon / Alt+Shift+O → open OrgKit in a full tab (not a tiny popup). */
+chrome.action.onClicked.addListener(() => {
+  openOrgKitTab().catch(() => {});
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handlers = {
     getOrgSession: () => getOrgSession(message.tabUrl || sender.tab?.url),
@@ -37,10 +42,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     listFlows: () => listFlows(message.tabUrl, message.apiVersion),
     getApexCoverage: () => getApexCoverage(message.tabUrl, message.apiVersion),
     getRecentDeployFailures: () => getRecentDeployFailures(message.tabUrl, message.apiVersion),
+    getOrgLimits: () => getOrgLimits(message.tabUrl, message.apiVersion),
+    listApexClasses: () => listApexClasses(message.tabUrl, message.query, message.apiVersion),
+    getApexClassBody: () => getApexClassBody(message.tabUrl, message.id, message.apiVersion),
     openUrl: async () => {
       await chrome.tabs.create({ url: message.url });
       return { ok: true };
     },
+    openOrgKit: () => openOrgKitTab(message.view),
     getActiveTabOrg: () => getActiveTabOrg(),
     searchMetadata: () => searchMetadata(message.tabUrl, message.query, message.typeId, message.apiVersion),
     listPackageTypeMembers: () =>
@@ -51,10 +60,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
     fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.4.2",
+      version: "1.5.0",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       hasExecuteAnonymous: typeof executeAnonymous === "function",
+      hasOrgLimits: typeof getOrgLimits === "function",
       metadataTypeCount: METADATA_SEARCH_TYPES.length,
       packageTypeCount: PACKAGE_TYPES.length
     })
@@ -78,6 +88,22 @@ async function getActiveTabOrg() {
   const org = parseOrgFromUrl(tab.url);
   const session = await getSessionForOrg(org);
   return { tab, org, session };
+}
+
+async function openOrgKitTab(view) {
+  const base = chrome.runtime.getURL("popup/popup.html");
+  const url = view ? `${base}?view=${encodeURIComponent(view)}` : base;
+  const all = await chrome.tabs.query({});
+  const existing = all.find((t) => typeof t.url === "string" && t.url.startsWith(base));
+  if (existing?.id) {
+    await chrome.tabs.update(existing.id, { active: true, url });
+    if (existing.windowId != null) {
+      await chrome.windows.update(existing.windowId, { focused: true });
+    }
+    return { ok: true, tabId: existing.id, reused: true };
+  }
+  const tab = await chrome.tabs.create({ url });
+  return { ok: true, tabId: tab.id, reused: false };
 }
 
 /** Prefer the active tab; otherwise any Salesforce org tab in this window / all windows. */
@@ -255,6 +281,62 @@ async function getApexCoverage(tabUrl, apiVersion = DEFAULT_API_VERSION) {
   } catch (e) {
     return { coveragePercent: null, error: e.message };
   }
+}
+
+async function getOrgLimits(tabUrl, apiVersion = DEFAULT_API_VERSION) {
+  return restGet(tabUrl, "/limits", apiVersion);
+}
+
+function escapeSoqlLike(value) {
+  return String(value || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/%/g, "\\%")
+    .replace(/_/g, "\\_");
+}
+
+async function listApexClasses(tabUrl, query = "", apiVersion = DEFAULT_API_VERSION) {
+  const needle = String(query || "").trim();
+  // Security: only allowlist-safe characters in LIKE; escape remaining quotes/wildcards.
+  if (needle && !/^[A-Za-z0-9_.\- ]{1,80}$/.test(needle)) {
+    throw new Error("Search may only use letters, numbers, spaces, underscore, dot, or hyphen.");
+  }
+  let q =
+    "SELECT Id, Name, NamespacePrefix, ApiVersion, LengthWithoutComments, LastModifiedDate FROM ApexClass ORDER BY Name ASC LIMIT 100";
+  if (needle) {
+    const like = escapeSoqlLike(needle);
+    q = `SELECT Id, Name, NamespacePrefix, ApiVersion, LengthWithoutComments, LastModifiedDate FROM ApexClass WHERE Name LIKE '%${like}%' ORDER BY LastModifiedDate DESC LIMIT 50`;
+  }
+  const data = await toolingQuery(tabUrl, q, apiVersion);
+  return {
+    totalSize: data.totalSize ?? (data.records || []).length,
+    records: (data.records || []).map((r) => ({
+      id: r.Id,
+      name: r.Name,
+      namespace: r.NamespacePrefix || null,
+      apiVersion: r.ApiVersion,
+      length: r.LengthWithoutComments,
+      lastModifiedDate: r.LastModifiedDate
+    }))
+  };
+}
+
+async function getApexClassBody(tabUrl, id, apiVersion = DEFAULT_API_VERSION) {
+  const cleanId = String(id || "").trim();
+  if (!/^[a-zA-Z0-9]{15,18}$/.test(cleanId)) throw new Error("Invalid Apex class Id.");
+  const q = `SELECT Id, Name, NamespacePrefix, Body, ApiVersion, LengthWithoutComments, LastModifiedDate FROM ApexClass WHERE Id = '${cleanId}' LIMIT 1`;
+  const data = await toolingQuery(tabUrl, q, apiVersion);
+  const row = data.records?.[0];
+  if (!row) throw new Error("Apex class not found.");
+  return {
+    id: row.Id,
+    name: row.Name,
+    namespace: row.NamespacePrefix || null,
+    body: row.Body || "",
+    apiVersion: row.ApiVersion,
+    length: row.LengthWithoutComments,
+    lastModifiedDate: row.LastModifiedDate
+  };
 }
 
 async function getRecentDeployFailures(tabUrl, apiVersion = DEFAULT_API_VERSION) {

@@ -60,7 +60,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
     fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.5.0",
+      version: "1.5.1",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       hasExecuteAnonymous: typeof executeAnonymous === "function",
@@ -104,6 +104,154 @@ async function openOrgKitTab(view) {
   }
   const tab = await chrome.tabs.create({ url });
   return { ok: true, tabId: tab.id, reused: false };
+}
+
+/**
+ * Run a Salesforce REST/Tooling request. Prefer service-worker fetch; if Chrome
+ * blocks it ("Failed to fetch"), retry via scripting inside a Salesforce tab.
+ */
+async function sfFetchUrl(url, sid, options = {}) {
+  try {
+    return await sfFetchUrlDirect(url, sid, options);
+  } catch (e) {
+    const msg = e?.message || String(e);
+    if (!/Failed to fetch|Failed to reach Salesforce|NetworkError|Load failed/i.test(msg)) {
+      throw e;
+    }
+    try {
+      return await sfFetchViaSalesforceTab(url, sid, options);
+    } catch (e2) {
+      throw new Error(
+        `${networkBlockedMessage(url, e)} Fallback via Salesforce tab also failed: ${e2.message || e2}`
+      );
+    }
+  }
+}
+
+async function sfFetchUrlDirect(url, sid, options = {}) {
+  const method = options.method || "GET";
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${sid}`,
+        Accept: "application/json"
+      },
+      credentials: "omit"
+    });
+  } catch (e) {
+    throw new Error(networkBlockedMessage(url, e));
+  }
+
+  if (method === "DELETE" && (res.status === 204 || res.status === 200)) {
+    return { ok: true };
+  }
+
+  const text = await res.text();
+  let body;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
+
+  if (!res.ok) {
+    const msg =
+      (Array.isArray(body) && body[0]?.message) || body?.message || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return body;
+}
+
+async function sfFetchViaSalesforceTab(url, sid, options = {}) {
+  const tab = await findSalesforceTab();
+  if (!tab?.id) {
+    throw new Error("No Salesforce tab available for API fallback.");
+  }
+  const method = options.method || "GET";
+  // Pass token only into the extension isolated world; never log it.
+  const [{ result }] = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    world: "ISOLATED",
+    args: [url, sid, method],
+    func: async (fetchUrl, token, httpMethod) => {
+      try {
+        const res = await fetch(fetchUrl, {
+          method: httpMethod,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json"
+          },
+          credentials: "omit"
+        });
+        const text = await res.text();
+        return { status: res.status, ok: res.ok, text };
+      } catch (err) {
+        return { error: String(err && err.message ? err.message : err) };
+      }
+    }
+  });
+
+  if (!result) throw new Error("Empty response from Salesforce tab fetch.");
+  if (result.error) throw new Error(result.error);
+  if (method === "DELETE" && (result.status === 204 || result.status === 200)) {
+    return { ok: true };
+  }
+
+  let body;
+  try {
+    body = result.text ? JSON.parse(result.text) : null;
+  } catch {
+    body = result.text;
+  }
+  if (!result.ok) {
+    const msg =
+      (Array.isArray(body) && body[0]?.message) || body?.message || `HTTP ${result.status}`;
+    throw new Error(msg);
+  }
+  return body;
+}
+
+async function sfFetchText(url, sid) {
+  try {
+    return await sfFetchTextDirect(url, sid);
+  } catch (e) {
+    const msg = e?.message || String(e);
+    if (!/Failed to fetch|Failed to reach Salesforce|NetworkError|Load failed/i.test(msg)) {
+      throw e;
+    }
+    const body = await sfFetchViaSalesforceTab(url, sid, { method: "GET" });
+    return typeof body === "string" ? body : JSON.stringify(body);
+  }
+}
+
+async function sfFetchTextDirect(url, sid) {
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${sid}`,
+        Accept: "text/plain, application/json"
+      },
+      credentials: "omit"
+    });
+  } catch (e) {
+    throw new Error(networkBlockedMessage(url, e));
+  }
+  const text = await res.text();
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const body = JSON.parse(text);
+      msg = (Array.isArray(body) && body[0]?.message) || body?.message || msg;
+    } catch {
+      /* keep status */
+    }
+    throw new Error(msg);
+  }
+  return text;
 }
 
 /** Prefer the active tab; otherwise any Salesforce org tab in this window / all windows. */
@@ -609,70 +757,6 @@ function networkBlockedMessage(url, err) {
     `Also keep a logged-in Salesforce tab open, then click Reload on the extension. ` +
     `Detail: ${err?.message || err}`
   );
-}
-
-async function sfFetchText(url, sid) {
-  let res;
-  try {
-    res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${sid}`,
-        Accept: "text/plain, application/json"
-      },
-      credentials: "omit"
-    });
-  } catch (e) {
-    throw new Error(networkBlockedMessage(url, e));
-  }
-  const text = await res.text();
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try {
-      const body = JSON.parse(text);
-      msg = (Array.isArray(body) && body[0]?.message) || body?.message || msg;
-    } catch {
-      /* keep status */
-    }
-    throw new Error(msg);
-  }
-  return text;
-}
-
-async function sfFetchUrl(url, sid, options = {}) {
-  const method = options.method || "GET";
-  let res;
-  try {
-    res = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${sid}`,
-        Accept: "application/json"
-      },
-      credentials: "omit"
-    });
-  } catch (e) {
-    throw new Error(networkBlockedMessage(url, e));
-  }
-
-  if (method === "DELETE" && (res.status === 204 || res.status === 200)) {
-    return { ok: true };
-  }
-
-  const text = await res.text();
-  let body;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = text;
-  }
-
-  if (!res.ok) {
-    const msg =
-      (Array.isArray(body) && body[0]?.message) || body?.message || `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-  return body;
 }
 
 function unique(arr) {

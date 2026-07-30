@@ -1,6 +1,6 @@
 (() => {
-  if (window.__SF_DEV_TOOLKIT__) return;
-  window.__SF_DEV_TOOLKIT__ = true;
+  if (window.__ORGKIT_CONTENT__) return;
+  window.__ORGKIT_CONTENT__ = true;
 
   const PREFIXES = {
     "001": "Account",
@@ -19,31 +19,39 @@
   };
 
   const state = {
-    showToolbar: true,
+    showLauncher: true,
     showBadge: true,
-    toolbar: null,
-    badge: null
+    launcher: null,
+    panel: null,
+    badge: null,
+    open: false
   };
 
   init();
 
   async function init() {
     const settings = await chrome.storage.sync.get({ showToolbar: true, showBadge: true });
-    state.showToolbar = settings.showToolbar;
-    state.showBadge = settings.showBadge;
+    state.showLauncher = settings.showToolbar !== false;
+    state.showBadge = settings.showBadge !== false;
 
     if (state.showBadge) mountBadge();
-    if (state.showToolbar) mountToolbar();
+    if (state.showLauncher) mountLauncher();
 
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "sync") return;
       if (changes.showBadge) {
-        state.showBadge = changes.showBadge.newValue;
+        state.showBadge = changes.showBadge.newValue !== false;
         state.showBadge ? mountBadge() : state.badge?.remove();
       }
       if (changes.showToolbar) {
-        state.showToolbar = changes.showToolbar.newValue;
-        state.showToolbar ? mountToolbar() : state.toolbar?.remove();
+        state.showLauncher = changes.showToolbar.newValue !== false;
+        if (state.showLauncher) mountLauncher();
+        else {
+          state.launcher?.remove();
+          state.panel?.remove();
+          state.launcher = null;
+          state.panel = null;
+        }
       }
     });
 
@@ -70,37 +78,61 @@
     state.badge?.remove();
     const env = envInfo();
     const el = document.createElement("div");
-    el.id = "sfdev-org-badge";
-    el.className = `sfdev-badge ${env.isSandbox ? "sandbox" : env.isDevEd ? "deved" : "prod"}`;
+    el.id = "orgkit-badge";
+    el.className = `orgkit-badge ${env.isSandbox ? "sandbox" : env.isDevEd ? "deved" : "prod"}`;
     el.title = env.host;
     el.textContent = env.label;
     document.documentElement.appendChild(el);
     state.badge = el;
   }
 
-  function mountToolbar() {
-    state.toolbar?.remove();
-    const bar = document.createElement("div");
-    bar.id = "sfdev-toolbar";
-    bar.className = "sfdev-toolbar";
-    bar.innerHTML = `
-      <button type="button" data-action="orgkit" title="Open OrgKit">OrgKit</button>
-      <button type="button" data-action="setup" title="Setup">Setup</button>
-      <button type="button" data-action="objects" title="Object Manager">Objects</button>
-      <button type="button" data-action="logs" title="Debug Logs">Logs</button>
-      <button type="button" data-action="flows" title="Flows">Flows</button>
-      <button type="button" data-action="users" title="Users">Users</button>
-      <button type="button" data-action="devconsole" title="Developer Console">Console</button>
-      <button type="button" data-action="copy-url" title="Copy page URL">URL</button>
-      <button type="button" data-action="hide" title="Hide toolbar">✕</button>
+  /** Compact right-edge tab (Inspector-style), not a wide bottom bar. */
+  function mountLauncher() {
+    state.launcher?.remove();
+    state.panel?.remove();
+
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.id = "orgkit-side-tab";
+    tab.className = "orgkit-side-tab";
+    tab.title = "OrgKit";
+    tab.setAttribute("aria-label", "Open OrgKit menu");
+    tab.innerHTML = `<span>OrgKit</span>`;
+    tab.addEventListener("click", () => togglePanel());
+
+    const panel = document.createElement("div");
+    panel.id = "orgkit-side-panel";
+    panel.className = "orgkit-side-panel";
+    panel.hidden = true;
+    panel.innerHTML = `
+      <button type="button" data-action="orgkit">Open OrgKit</button>
+      <button type="button" data-action="setup">Setup</button>
+      <button type="button" data-action="objects">Objects</button>
+      <button type="button" data-action="logs">Logs</button>
+      <button type="button" data-action="flows">Flows</button>
+      <button type="button" data-action="console">Console</button>
+      <button type="button" data-action="hide" class="orgkit-muted">Hide tab</button>
     `;
-    bar.addEventListener("click", onToolbarClick);
-    document.documentElement.appendChild(bar);
-    state.toolbar = bar;
+    panel.addEventListener("click", onPanelClick);
+
+    document.documentElement.appendChild(tab);
+    document.documentElement.appendChild(panel);
+    state.launcher = tab;
+    state.panel = panel;
+    state.open = false;
+  }
+
+  function togglePanel(force) {
+    state.open = typeof force === "boolean" ? force : !state.open;
+    if (state.panel) state.panel.hidden = !state.open;
+    if (state.launcher) state.launcher.classList.toggle("is-open", state.open);
   }
 
   function lightningBase() {
     if (location.hostname.includes("lightning.force.com")) return location.origin;
+    if (location.hostname.includes("salesforce-setup.com")) {
+      return location.origin.replace(".my.salesforce-setup.com", ".lightning.force.com");
+    }
     return location.origin.replace(".my.salesforce.com", ".lightning.force.com");
   }
 
@@ -114,7 +146,7 @@
     return location.origin;
   }
 
-  async function onToolbarClick(e) {
+  async function onPanelClick(e) {
     const btn = e.target.closest("button[data-action]");
     if (!btn) return;
     const action = btn.dataset.action;
@@ -124,53 +156,56 @@
       objects: `${L}/lightning/setup/ObjectManager/home`,
       logs: `${L}/lightning/setup/ApexDebugLogs/home`,
       flows: `${L}/lightning/setup/Flows/home`,
-      users: `${L}/lightning/setup/ManageUsers/home`,
-      devconsole: `${apiBase()}/_ui/common/apex/debug/ApexCSIPage`
+      console: `${apiBase()}/_ui/common/apex/debug/ApexCSIPage`
     };
 
     if (action === "hide") {
       await chrome.storage.sync.set({ showToolbar: false });
-      state.toolbar?.remove();
+      state.launcher?.remove();
+      state.panel?.remove();
       return;
     }
     if (action === "orgkit") {
-      await chrome.runtime.sendMessage({ type: "openOrgKit" });
-      return;
-    }
-    if (action === "copy-url") {
-      await navigator.clipboard.writeText(location.href);
-      flash(btn, "Copied");
+      await openOrgKit();
+      togglePanel(false);
       return;
     }
     if (routes[action]) {
-      if (action === "devconsole") window.open(routes[action], "_blank");
+      if (action === "console") window.open(routes[action], "_blank");
       else location.href = routes[action];
+      togglePanel(false);
     }
   }
 
-  function flash(el, text) {
-    const prev = el.textContent;
-    el.textContent = text;
-    setTimeout(() => {
-      el.textContent = prev;
-    }, 900);
+  async function openOrgKit() {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: "openOrgKit" });
+      if (res?.ok === false) throw new Error(res.error || "Could not open OrgKit");
+    } catch (err) {
+      // Fallback when service worker is asleep / message fails
+      try {
+        window.open(chrome.runtime.getURL("popup/popup.html"), "_blank", "noopener");
+      } catch {
+        console.warn("OrgKit open failed", err);
+      }
+    }
   }
 
   function onSelectionHint() {
     const sel = window.getSelection()?.toString().trim() || "";
     if (!/^[a-zA-Z0-9]{15}$|^[a-zA-Z0-9]{18}$/.test(sel)) {
-      document.getElementById("sfdev-id-tip")?.remove();
+      document.getElementById("orgkit-id-tip")?.remove();
       return;
     }
     showIdTip(sel);
   }
 
   function showIdTip(id) {
-    document.getElementById("sfdev-id-tip")?.remove();
+    document.getElementById("orgkit-id-tip")?.remove();
     const type = PREFIXES[id.slice(0, 3)] || (id.startsWith("a") ? "Custom" : "Record");
     const tip = document.createElement("div");
-    tip.id = "sfdev-id-tip";
-    tip.className = "sfdev-id-tip";
+    tip.id = "orgkit-id-tip";
+    tip.className = "orgkit-id-tip";
     tip.innerHTML = `
       <strong>${type}</strong>
       <code>${id}</code>

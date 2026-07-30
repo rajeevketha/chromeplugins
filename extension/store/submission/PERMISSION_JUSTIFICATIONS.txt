@@ -1,0 +1,38 @@
+================================================================================
+Permission justifications — paste into Chrome Web Store Dashboard
+================================================================================
+
+cookies
+-------
+Required to read the Salesforce sid cookie on Salesforce-related domains so OrgKit can call Salesforce REST/Tooling APIs using the user’s existing logged-in browser session. OrgKit does not read cookies from non-Salesforce sites. The sid is used in-browser as an Authorization bearer token, is never written to sync storage, and is never sent to AI providers.
+
+tabs
+----
+Required to identify the active Salesforce tab, resolve the correct org host, and open OrgKit / records / Setup pages in the right org context.
+
+scripting
+---------
+Required as a fallback to execute Salesforce API requests from an open Salesforce tab when Chrome site-access rules block the extension service worker fetch. Used only for Salesforce hosts and only for user-initiated actions.
+
+storage
+-------
+Required to store user settings, favorites, saved SOQL library entries, UI preferences, and optional AI configuration locally in the browser profile. Session cookies are not stored in extension sync storage.
+
+activeTab
+---------
+Used for user-initiated interaction with the current tab when opening OrgKit features from the toolbar / keyboard command.
+
+Host permissions
+  https://*.salesforce.com/*
+  https://*.force.com/*
+  https://*.cloudforce.com/*
+  https://*.salesforce-setup.com/*
+  https://*.visualforce.com/*
+---------------------------------
+Required to call Salesforce APIs and to show the on-page OrgKit launcher / quick links on Salesforce pages. Not used for unrelated websites.
+
+Optional host permissions
+  https://api.openai.com/*
+  https://*.openai.com/*
+---------------------------------
+Only if the user enables AI assist and grants permission. Used solely for optional NL/formula/error/Apex assistance with the user’s own API key. Salesforce session cookies are never included in AI prompts.

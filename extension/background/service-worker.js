@@ -49,7 +49,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       listInactiveFlowVersions(message.tabUrl, message.needle, message.includeMetadata, message.apiVersion),
     deleteFlowVersions: () => deleteFlowVersions(message.tabUrl, message.ids, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.3.2",
+      version: "1.3.3",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       metadataTypeCount: METADATA_SEARCH_TYPES.length,

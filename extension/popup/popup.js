@@ -104,6 +104,8 @@ const $ = (sel) => document.querySelector(sel);
 init();
 
 async function init() {
+  applyShellMode();
+  window.addEventListener("resize", applyShellMode);
   renderFeatureGrid();
   bindNav();
   bindFeatureActions();

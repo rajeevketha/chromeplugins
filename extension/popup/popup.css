@@ -23,13 +23,15 @@
 
 * { box-sizing: border-box; }
 
+/* Toolbar popup default size (Chrome action popup). */
+html {
+  width: 800px;
+  height: 600px;
+}
+
 html,
 body {
   margin: 0;
-  width: 780px;
-  min-height: 600px;
-  height: 600px;
-  overflow: hidden;
   font-family: var(--font);
   font-size: 13px;
   line-height: 1.4;
@@ -40,10 +42,42 @@ body {
     var(--bg);
 }
 
-/* Fill the popup: header + banner fixed feel, main scrolls inside */
 body {
+  width: 100%;
+  height: 100%;
+  min-height: 600px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+html.shell-wide {
+  width: 100% !important;
+  height: 100% !important;
+}
+html.shell-wide body {
+  min-height: 100vh;
+  height: auto;
+  overflow: auto;
+}
+html.shell-wide .feature-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+html.shell-wide .org-banner,
+html.shell-wide .header,
+html.shell-wide .view {
+  padding-left: clamp(14px, 2vw, 28px);
+  padding-right: clamp(14px, 2vw, 28px);
+}
+html.shell-wide .org-banner {
+  margin-left: clamp(14px, 2vw, 28px);
+  margin-right: clamp(14px, 2vw, 28px);
+}
+html.shell-wide .query-table-wrap,
+html.shell-wide .describe-list,
+html.shell-wide .package-members,
+html.shell-wide .link-list {
+  max-height: min(55vh, 520px);
 }
 
 .header {
@@ -144,8 +178,9 @@ body {
 
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  width: 100%;
 }
 
 .feature-card {

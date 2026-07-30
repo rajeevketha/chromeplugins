@@ -27,11 +27,19 @@
   <!-- HOME HUB -->
   <section id="view-home" class="view active">
     <p class="lede">Developer assistants for day-to-day Salesforce work.</p>
-    <p class="hint">
-      Uses your open Salesforce tab session in-browser only — session is not uploaded to OrgKit servers.
-      <a href="../privacy.html" target="_blank" rel="noopener">Privacy</a>
-      · destructive edits require confirmation.
-    </p>
+    <div class="trust-card">
+      <strong>Privacy &amp; data access</strong>
+      <ul>
+        <li>Uses your open Salesforce tab session in the browser only — OrgKit does not upload your <code>sid</code>.</li>
+        <li>What you can query or edit is whatever Salesforce allows for your user (profile, permission sets, object/field access).</li>
+        <li>Deletes and saves ask for confirmation before changing org data.</li>
+      </ul>
+      <p class="trust-links">
+        <a href="../privacy.html" target="_blank" rel="noopener">Privacy policy</a>
+        ·
+        <button type="button" class="linkish" id="homeOpenSettings">Settings</button>
+      </p>
+    </div>
     <div class="feature-grid" id="featureGrid"></div>
     <div class="extras">
       <div class="label" style="margin-top:0">Quick links &amp; utilities</div>
@@ -57,7 +65,7 @@
     <label class="label" for="nlInput">Describe the data you need</label>
     <textarea id="nlInput" class="textarea" rows="3" placeholder="Show open Cases created this week"></textarea>
     <p class="hint">
-      Standard mode includes custom objects and custom metadata (__mdt). Tooling mode matches ApexClass, Flow, CustomObject, and other Tooling entities.
+      Standard mode includes custom objects and custom metadata (__mdt). Tooling mode matches ApexClass, FlowDefinition, Flow versions, CustomObject, and other Tooling entities. Results respect your Salesforce permissions.
     </p>
     <div class="row">
       <button type="button" class="btn primary" id="genSoql">Generate SOQL</button>

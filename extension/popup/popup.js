@@ -220,6 +220,7 @@ function renderFeatureGrid() {
 
 function bindNav() {
   $("#openOptions").addEventListener("click", () => chrome.runtime.openOptionsPage());
+  $("#homeOpenSettings")?.addEventListener("click", () => chrome.runtime.openOptionsPage());
   $("#backBtn").addEventListener("click", () => showView("home"));
   document.querySelectorAll("[data-open]").forEach((btn) => {
     btn.addEventListener("click", () => showView(btn.getAttribute("data-open")));
@@ -430,7 +431,7 @@ function renderQueryResult(panel, statusEl, key, queryResult, soqlText = "", opt
     empty.className = "query-empty";
     empty.textContent = "Query returned 0 records.";
     wrap.appendChild(empty);
-    if (statusEl) statusEl.textContent = "Ready to export an empty sheet, or adjust the query.";
+    setQueryStatus(statusEl, "Ready to export an empty sheet, or adjust the query.", "ok");
     return;
   }
 
@@ -470,7 +471,7 @@ function renderQueryResult(panel, statusEl, key, queryResult, soqlText = "", opt
       openBtn.title = "Open in Salesforce";
       openBtn.addEventListener("click", () => {
         openQueryRecord(recordId).catch((e) => {
-          if (statusEl) statusEl.textContent = e.message;
+          setQueryStatus(statusEl, e.message, "error");
         });
       });
       const allBtn = document.createElement("button");
@@ -485,7 +486,7 @@ function renderQueryResult(panel, statusEl, key, queryResult, soqlText = "", opt
           id: recordId,
           tooling
         }).catch((e) => {
-          if (statusEl) statusEl.textContent = e.message;
+          setQueryStatus(statusEl, e.message, "error");
         });
       });
       actions.appendChild(openBtn);
@@ -511,7 +512,7 @@ function renderQueryResult(panel, statusEl, key, queryResult, soqlText = "", opt
         a.addEventListener("click", (e) => {
           e.preventDefault();
           openQueryRecord(cell).catch((err) => {
-            if (statusEl) statusEl.textContent = err.message;
+            setQueryStatus(statusEl, err.message, "error");
           });
         });
         td.appendChild(a);
@@ -525,11 +526,13 @@ function renderQueryResult(panel, statusEl, key, queryResult, soqlText = "", opt
   });
   tableEl.appendChild(tbody);
   wrap.appendChild(tableEl);
-  if (statusEl) {
-    statusEl.textContent = recordIdHint(table)
+  setQueryStatus(
+    statusEl,
+    recordIdHint(table)
       ? "Click Id / Open for Lightning, or All data to view every field and edit/delete."
-      : "Include Id in SELECT to enable Open and All data.";
-  }
+      : "Include Id in SELECT to enable Open and All data.",
+    "ok"
+  );
 }
 
 function recordIdHint(table) {
@@ -543,7 +546,7 @@ async function openQueryRecord(recordId) {
   await chrome.tabs.create({ url });
 }
 
-function clearQueryResult(panel, statusEl, key, message) {
+function clearQueryResult(panel, statusEl, key, message, kind = "info") {
   state.lastQueryTables[key] = null;
   state.lastQueryJson[key] = "";
   state.lastQueryRecords[key] = null;
@@ -554,7 +557,27 @@ function clearQueryResult(panel, statusEl, key, message) {
     const meta = panel.querySelector("[data-query-meta]");
     if (meta) meta.textContent = "";
   }
-  if (statusEl) statusEl.textContent = message || "";
+  setQueryStatus(statusEl, message || "", kind);
+}
+
+function setQueryStatus(statusEl, message, kind = "info") {
+  if (!statusEl) return;
+  statusEl.textContent = message || "";
+  statusEl.classList.remove("is-error", "is-ok", "is-busy");
+  if (!message) return;
+  if (kind === "error") statusEl.classList.add("is-error");
+  else if (kind === "ok") statusEl.classList.add("is-ok");
+  else if (kind === "busy") statusEl.classList.add("is-busy");
+}
+
+function setStatusMessage(el, message, kind = "info") {
+  if (!el) return;
+  el.textContent = message || "";
+  el.classList.remove("is-error", "is-ok", "is-busy");
+  if (!message) return;
+  if (kind === "error") el.classList.add("is-error");
+  else if (kind === "ok") el.classList.add("is-ok");
+  else if (kind === "busy") el.classList.add("is-busy");
 }
 
 function bindRecordDrawer() {
@@ -881,7 +904,7 @@ function renderSoqlLibrary() {
         $("#soqlSaveName").value = row.name;
         if ($("#soqlApiMode")) $("#soqlApiMode").value = row.apiMode === "tooling" ? "tooling" : "rest";
         state.editingSoqlId = row.id;
-        $("#soqlQueryStatus").textContent = `Loaded “${row.name}”.`;
+        setQueryStatus($("#soqlQueryStatus"), `Loaded “${row.name}”.`, "ok");
         onSoqlApiModeChange().catch(() => {});
         refreshSoqlSuggestions();
       })
@@ -929,9 +952,9 @@ async function onSaveSoqlToLibrary() {
     const match = state.soqlLibrary.find((r) => r.name === name && r.soql === String($("#soqlInput").value).trim());
     state.editingSoqlId = match?.id || state.editingSoqlId;
     renderSoqlLibrary();
-    if (status) status.textContent = `Saved “${name}” to library.`;
+    setQueryStatus(status, `Saved “${name}” to library.`, "ok");
   } catch (e) {
-    if (status) status.textContent = e.message;
+    setQueryStatus(status, e.message, "error");
   }
 }
 
@@ -1039,18 +1062,26 @@ async function requireTabUrl() {
 
 async function onGenSoql() {
   const out = $("#nlSoqlOut");
-  out.textContent = "Generating…";
+  const status = $("#nlQueryStatus");
+  setStatusMessage(out, "Generating…", "busy");
+  setQueryStatus(status, "", "info");
   try {
     const apiMode = nlApiMode();
     let sobjects = await loadNlSObjects(apiMode);
     const result = await generateSoql($("#nlInput").value, { sobjects, apiMode });
     state.lastGenSoql = result.soql;
     state.lastGenApiMode = result.apiMode || apiMode;
-    out.textContent = `${result.soql}\n\n// source: ${result.source}\n// api: ${state.lastGenApiMode}\n${result.notes
-      .map((n) => `// ${n}`)
-      .join("\n")}`;
+    setStatusMessage(
+      out,
+      `${result.soql}\n\n// source: ${result.source}\n// api: ${state.lastGenApiMode}\n${result.notes
+        .map((n) => `// ${n}`)
+        .join("\n")}`,
+      "ok"
+    );
+    setQueryStatus(status, "SOQL ready — click Run to execute against your org session.", "ok");
   } catch (e) {
-    out.textContent = e.message;
+    setStatusMessage(out, e.message, "error");
+    setQueryStatus(status, e.message, "error");
   }
 }
 
@@ -1089,10 +1120,10 @@ async function onRunGenSoql() {
   const panel = $("#nlQueryPanel");
   const status = $("#nlQueryStatus");
   if (!state.lastGenSoql) {
-    clearQueryResult(panel, status, "nl", "Generate a query first.");
+    clearQueryResult(panel, status, "nl", "Generate a query first.", "info");
     return;
   }
-  clearQueryResult(panel, status, "nl", "Running…");
+  clearQueryResult(panel, status, "nl", "Running…", "busy");
   try {
     const tooling = state.lastGenApiMode === "tooling";
     const res = await send(tooling ? "toolingQuery" : "runSoql", {
@@ -1103,7 +1134,7 @@ async function onRunGenSoql() {
     if (!res.ok) throw new Error(res.error);
     renderQueryResult(panel, status, "nl", res.result, state.lastGenSoql, { tooling });
   } catch (e) {
-    clearQueryResult(panel, status, "nl", e.message);
+    clearQueryResult(panel, status, "nl", e.message, "error");
   }
 }
 
@@ -2006,7 +2037,7 @@ async function openQuickLink(item) {
 async function runSoqlManual() {
   const panel = $("#soqlQueryPanel");
   const status = $("#soqlQueryStatus");
-  clearQueryResult(panel, status, "soql", "Running…");
+  clearQueryResult(panel, status, "soql", "Running…", "busy");
   hideSoqlSuggest();
   try {
     await ensureSalesforceSiteAccess();
@@ -2019,7 +2050,7 @@ async function runSoqlManual() {
     if (!res.ok) throw new Error(res.error);
     renderQueryResult(panel, status, "soql", res.result, $("#soqlInput").value);
   } catch (e) {
-    clearQueryResult(panel, status, "soql", e.message);
+    clearQueryResult(panel, status, "soql", e.message, "error");
   }
 }
 
@@ -2036,16 +2067,14 @@ function bindSoqlAssist() {
 
   mode.addEventListener("change", () => {
     onSoqlApiModeChange().catch((e) => {
-      const status = $("#soqlQueryStatus");
-      if (status) status.textContent = e.message;
+      setQueryStatus($("#soqlQueryStatus"), e.message, "error");
     });
   });
   loadBtn?.addEventListener("click", () => {
     ensureSoqlFieldsForActiveObject(true)
       .then(() => refreshSoqlSuggestions())
       .catch((e) => {
-        const status = $("#soqlQueryStatus");
-        if (status) status.textContent = e.message;
+        setQueryStatus($("#soqlQueryStatus"), e.message, "error");
       });
   });
   obj?.addEventListener("change", () => {

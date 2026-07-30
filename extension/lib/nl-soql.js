@@ -49,9 +49,13 @@ const TOOLING_ALIASES = {
   "lightning web components": "LightningComponentBundle",
   aura: "AuraDefinitionBundle",
   "aura component": "AuraDefinitionBundle",
-  flow: "Flow",
-  flows: "Flow",
+  flow: "FlowDefinition",
+  flows: "FlowDefinition",
   "flow definition": "FlowDefinition",
+  "flow definitions": "FlowDefinition",
+  "flow version": "Flow",
+  "flow versions": "Flow",
+  "flow version history": "Flow",
   "custom object": "CustomObject",
   "custom objects": "CustomObject",
   "custom field": "CustomField",
@@ -173,7 +177,7 @@ export async function generateSoql(
       const hintBlock = objectHints.length
         ? ` Prefer these org objects when they fit: ${objectHints.join(", ")}.`
         : mode === "tooling"
-          ? " Prefer Tooling API names (ApexClass, Flow, CustomObject, CustomField, etc.)."
+          ? " Prefer Tooling API names (ApexClass, FlowDefinition, Flow, CustomObject, CustomField, etc.). For flows use FlowDefinition (API name); Flow is versions and has MasterLabel/Status/VersionNumber — not DeveloperName."
           : " Prefer exact API names including custom __c and custom metadata __mdt objects.";
       const raw = await aiComplete(
         `You are a Salesforce SOQL expert${mode === "tooling" ? " for the Tooling API" : ""}. Reply with ONLY a valid SOQL query. Use real Salesforce API names (including __c and __mdt). Prefer selective filters. Never use SOSL. No markdown.${hintBlock}`,
@@ -220,20 +224,29 @@ export function resolveObject(text, sobjects = [], apiMode = "rest") {
     if (hit) return { objectName: hit.name, via: "api-name", score: 98 };
   }
 
-  // 2) Match against org describe (labels + API names)
+  // Tooling: prefer known aliases before org describe. Short words like "flow"
+  // otherwise match Tooling entity Flow (versions) via name substring, even when
+  // users usually want FlowDefinition (API names).
+  if (mode === "tooling") {
+    const toolingAlias = matchAlias(lower, TOOLING_ALIASES);
+    if (toolingAlias) return toolingAlias;
+  }
+
+  // Match against org describe (labels + API names)
   const orgHit = matchOrgObject(text, sobjects);
   if (orgHit && orgHit.score >= 70) return orgHit;
 
-  // 3) Mode-specific aliases (longest keys first for multi-word tooling phrases)
-  const aliases = mode === "tooling" ? TOOLING_ALIASES : OBJECT_ALIASES;
-  const aliasKeys = Object.keys(aliases).sort((a, b) => b.length - a.length);
-  for (const alias of aliasKeys) {
-    if (!new RegExp(`\\b${alias.replace(/\s+/g, "\\s+")}\\b`, "i").test(lower)) continue;
-    if (mode === "rest" && (alias === "product" || alias === "products") && hasProductQualifier(lower)) {
-      if (orgHit) return orgHit;
-      continue;
+  // Standard-mode aliases (longest keys first)
+  if (mode === "rest") {
+    const aliasKeys = Object.keys(OBJECT_ALIASES).sort((a, b) => b.length - a.length);
+    for (const alias of aliasKeys) {
+      if (!new RegExp(`\\b${alias.replace(/\s+/g, "\\s+")}\\b`, "i").test(lower)) continue;
+      if ((alias === "product" || alias === "products") && hasProductQualifier(lower)) {
+        if (orgHit) return orgHit;
+        continue;
+      }
+      return { objectName: OBJECT_ALIASES[alias], via: "alias", score: 60 };
     }
-    return { objectName: aliases[alias], via: "alias", score: 60 };
   }
 
   if (orgHit) return orgHit;
@@ -276,6 +289,15 @@ function guessCustomObjectApi(text) {
 function hasProductQualifier(lower) {
   // "sap products", "custom products", "foo product" — not bare "products"
   return /\b([a-z0-9]+)\s+products?\b/i.test(lower);
+}
+
+function matchAlias(lower, aliases) {
+  const aliasKeys = Object.keys(aliases || {}).sort((a, b) => b.length - a.length);
+  for (const alias of aliasKeys) {
+    if (!new RegExp(`\\b${alias.replace(/\s+/g, "\\s+")}\\b`, "i").test(lower)) continue;
+    return { objectName: aliases[alias], via: "alias", score: 85 };
+  }
+  return null;
 }
 
 function matchOrgObject(text, sobjects) {
@@ -411,8 +433,14 @@ function ruleBasedSoql(text, sobjects = [], resolved = null, apiMode = "rest") {
   const fields = ["Id"];
   if (/__mdt$/i.test(objectName)) fields.push("DeveloperName", "MasterLabel");
   else if (objectName === "ApexClass" || objectName === "ApexTrigger") fields.push("Name", "NamespacePrefix", "ApiVersion", "Status");
-  else if (objectName === "Flow" || objectName === "FlowDefinition") fields.push("DeveloperName", "MasterLabel", "ManageableState");
-  else if (objectName === "CustomObject") fields.push("DeveloperName", "NamespacePrefix", "ManageableState");
+  else if (objectName === "FlowDefinition") {
+    // Tooling FlowDefinition has the API name; Flow is version rows (no DeveloperName).
+    fields.push("DeveloperName", "MasterLabel", "ActiveVersionId", "LatestVersionId");
+    notes.push("FlowDefinition = one row per flow (API name). For versions, ask for “flow versions” (Flow).");
+  } else if (objectName === "Flow") {
+    fields.push("MasterLabel", "Status", "ProcessType", "VersionNumber", "ManageableState", "DefinitionId");
+    notes.push("Tooling Flow = flow versions. API name lives on FlowDefinition (or Definition.DeveloperName).");
+  } else if (objectName === "CustomObject") fields.push("DeveloperName", "NamespacePrefix", "ManageableState");
   else if (objectName === "CustomField") fields.push("DeveloperName", "TableEnumOrId", "ManageableState");
   else if (objectName === "LightningComponentBundle" || objectName === "AuraDefinitionBundle") {
     fields.push("DeveloperName", "NamespacePrefix", "ApiVersion");
@@ -435,7 +463,7 @@ function ruleBasedSoql(text, sobjects = [], resolved = null, apiMode = "rest") {
 
   const named = text.match(/(?:named|name(?:\s+is|\s+equals)?|called)\s+["']?([^"'\n,]+?)["']?(?:\s|$)/i);
   if (named) {
-    const col = /__mdt$/i.test(objectName) ? "DeveloperName" : "Name";
+    const col = nameFilterColumn(objectName);
     wheres.push(`${col} LIKE '%${escapeSoql(named[1].trim())}%'`);
   }
 
@@ -444,6 +472,8 @@ function ruleBasedSoql(text, sobjects = [], resolved = null, apiMode = "rest") {
 
   if (/\bactive\b/.test(lower) && objectName === "User") wheres.push("IsActive = true");
   if (/\binactive\b/.test(lower) && objectName === "User") wheres.push("IsActive = false");
+  if (/\bactive\b/.test(lower) && objectName === "Flow") wheres.push("Status = 'Active'");
+  if (/\b(draft|inactive)\b/.test(lower) && objectName === "Flow") wheres.push("Status = 'Draft'");
   if (/\bclosed\b/.test(lower) && objectName === "Case") wheres.push("IsClosed = true");
   if (/\bopen\b/.test(lower) && objectName === "Case") wheres.push("IsClosed = false");
   if (/\bwon\b/.test(lower) && objectName === "Opportunity") wheres.push("IsWon = true");
@@ -489,4 +519,25 @@ function ruleBasedSoql(text, sobjects = [], resolved = null, apiMode = "rest") {
 
 function escapeSoql(value) {
   return String(value).replace(/'/g, "\\'");
+}
+
+/** Best text column for “named / called …” filters by object. */
+function nameFilterColumn(objectName) {
+  if (/__mdt$/i.test(objectName)) return "DeveloperName";
+  if (
+    objectName === "FlowDefinition" ||
+    objectName === "CustomObject" ||
+    objectName === "CustomField" ||
+    objectName === "LightningComponentBundle" ||
+    objectName === "AuraDefinitionBundle" ||
+    objectName === "ValidationRule" ||
+    objectName === "FlexiPage" ||
+    objectName === "PermissionSet" ||
+    objectName === "Profile"
+  ) {
+    return "DeveloperName";
+  }
+  if (objectName === "Flow") return "MasterLabel";
+  if (objectName === "ApexClass" || objectName === "ApexTrigger") return "Name";
+  return "Name";
 }

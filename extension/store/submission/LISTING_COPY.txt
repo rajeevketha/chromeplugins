@@ -60,9 +60,13 @@ PRIVACY POLICY URL
 
 Host extension/privacy.html on a public HTTPS URL, then paste that URL here.
 
-Recommended options:
-1) GitHub Pages on rajeevketha/chromeplugins
-2) Any public HTTPS page that mirrors privacy.html
+Intended GitHub Pages URL (after repo is Public + Pages enabled on main):
+  https://rajeevketha.github.io/chromeplugins/extension/privacy.html
+
+main already contains privacy.html. Enable Pages:
+  Repo Settings → Pages → Deploy from a branch → main → / (root)
+
+If the repo stays private, host privacy.html elsewhere on public HTTPS.
 
 Do NOT paste a file:// or chrome-extension:// URL — the Store requires a public https:// page.
 

@@ -8,6 +8,10 @@ export function isSalesforceId(value) {
   return ID_RE.test(String(value || "").trim());
 }
 
+export function isCustomMetadataType(name) {
+  return /__mdt$/i.test(String(name || ""));
+}
+
 /** Prefer attributes.type from query rows; fall back to FROM clause. */
 export function detectSObjectType(queryResult, soql = "") {
   const records = Array.isArray(queryResult?.records) ? queryResult.records : [];
@@ -24,7 +28,6 @@ export function extractRecordId(record, flatRow, columns) {
   if (!flatRow || !columns) return null;
   const idIdx = columns.findIndex((c) => c === "Id" || c.endsWith(".Id"));
   if (idIdx >= 0 && isSalesforceId(flatRow[idIdx])) return String(flatRow[idIdx]);
-  // scan cells for a lone Id-looking value when Id column missing
   for (const cell of flatRow) {
     if (isSalesforceId(cell) && String(cell).length >= 15) return String(cell);
   }
@@ -33,10 +36,12 @@ export function extractRecordId(record, flatRow, columns) {
 
 /**
  * Build editor field list from describe + record values.
- * Non-updateable fields are shown read-only.
+ * Custom metadata (__mdt): allow editing MasterLabel + custom fields even when
+ * describe.updateable is false (updates go through Tooling CustomMetadata).
  */
 export function buildRecordEditorFields(describe, record = {}) {
   const fields = Array.isArray(describe?.fields) ? describe.fields : [];
+  const cmdt = isCustomMetadataType(describe?.name);
   const rows = [];
   for (const f of fields) {
     if (!f?.name) continue;
@@ -46,11 +51,24 @@ export function buildRecordEditorFields(describe, record = {}) {
     if (value !== null && typeof value === "object") {
       value = JSON.stringify(value);
     }
+    let updateable = !!f.updateable;
+    if (cmdt) {
+      if (name === "MasterLabel" || name === "Label" || f.custom || /__c$/i.test(name)) {
+        updateable = true;
+      }
+      if (
+        ["Id", "DeveloperName", "QualifiedApiName", "NamespacePrefix", "Language", "SystemModstamp"].includes(
+          name
+        )
+      ) {
+        updateable = false;
+      }
+    }
     rows.push({
       name,
       label: f.label || name,
       type: f.type || "string",
-      updateable: !!f.updateable,
+      updateable,
       createable: !!f.createable,
       nillable: !!f.nillable,
       custom: !!f.custom,
@@ -61,13 +79,13 @@ export function buildRecordEditorFields(describe, record = {}) {
       value: value === undefined || value === null ? "" : value
     });
   }
-  // Put Name-like and common fields first, then alpha
   rows.sort((a, b) => {
     const rank = (f) => {
       if (f.name === "Id") return 0;
-      if (f.name === "Name") return 1;
-      if (f.updateable) return 2;
-      return 3;
+      if (f.name === "DeveloperName" || f.name === "Name") return 1;
+      if (f.name === "MasterLabel" || f.name === "Label") return 2;
+      if (f.updateable) return 3;
+      return 4;
     };
     const d = rank(a) - rank(b);
     return d || a.name.localeCompare(b.name);

@@ -34,6 +34,41 @@ const OBJECT_ALIASES = {
   knowledge: "Knowledge__kav"
 };
 
+/** Tooling API object aliases (NL → SOQL in Tooling mode). */
+const TOOLING_ALIASES = {
+  "apex class": "ApexClass",
+  "apex classes": "ApexClass",
+  apexclass: "ApexClass",
+  apex: "ApexClass",
+  "apex trigger": "ApexTrigger",
+  "apex triggers": "ApexTrigger",
+  trigger: "ApexTrigger",
+  triggers: "ApexTrigger",
+  lwc: "LightningComponentBundle",
+  "lightning web component": "LightningComponentBundle",
+  "lightning web components": "LightningComponentBundle",
+  aura: "AuraDefinitionBundle",
+  "aura component": "AuraDefinitionBundle",
+  flow: "Flow",
+  flows: "Flow",
+  "flow definition": "FlowDefinition",
+  "custom object": "CustomObject",
+  "custom objects": "CustomObject",
+  "custom field": "CustomField",
+  "custom fields": "CustomField",
+  "validation rule": "ValidationRule",
+  "validation rules": "ValidationRule",
+  profile: "Profile",
+  profiles: "Profile",
+  "permission set": "PermissionSet",
+  "permission sets": "PermissionSet",
+  "compact layout": "CompactLayout",
+  "flexipage": "FlexiPage",
+  "lightning page": "FlexiPage",
+  "entity definition": "EntityDefinition",
+  "field definition": "FieldDefinition"
+};
+
 const STOP_WORDS = new Set([
   "a",
   "an",
@@ -118,24 +153,30 @@ const STOP_WORDS = new Set([
 
 /**
  * Convert natural language to SOQL using rules, optionally enhanced by AI.
- * Pass org `sobjects` from describeGlobal so custom objects (e.g. SAP_Product__c)
- * resolve from phrases like "sap products".
- * @returns {Promise<{ soql: string, source: 'rules'|'ai', notes: string[] }>}
+ * Pass org `sobjects` from describeGlobal (standard or Tooling) so custom objects
+ * and Tooling entities resolve from labels / phrases.
+ * @returns {Promise<{ soql: string, source: 'rules'|'ai', notes: string[], apiMode: 'rest'|'tooling' }>}
  */
-export async function generateSoql(naturalLanguage, { preferAi = true, sobjects = [] } = {}) {
+export async function generateSoql(
+  naturalLanguage,
+  { preferAi = true, sobjects = [], apiMode = "rest" } = {}
+) {
   const text = naturalLanguage.trim();
   if (!text) throw new Error("Describe the query in plain English.");
+  const mode = apiMode === "tooling" ? "tooling" : "rest";
 
-  const resolved = resolveObject(text, sobjects);
+  const resolved = resolveObject(text, sobjects, mode);
   const objectHints = buildObjectHints(text, sobjects, resolved);
 
   if (preferAi && (await isAiReady())) {
     try {
       const hintBlock = objectHints.length
         ? ` Prefer these org objects when they fit: ${objectHints.join(", ")}.`
-        : " Prefer exact custom object API names ending in __c when the user names a custom entity.";
+        : mode === "tooling"
+          ? " Prefer Tooling API names (ApexClass, Flow, CustomObject, CustomField, etc.)."
+          : " Prefer exact API names including custom __c and custom metadata __mdt objects.";
       const raw = await aiComplete(
-        `You are a Salesforce SOQL expert. Reply with ONLY a valid SOQL query. Use real Salesforce API names (including custom __c objects). Prefer selective filters. Never use SOSL. No markdown.${hintBlock}`,
+        `You are a Salesforce SOQL expert${mode === "tooling" ? " for the Tooling API" : ""}. Reply with ONLY a valid SOQL query. Use real Salesforce API names (including __c and __mdt). Prefer selective filters. Never use SOSL. No markdown.${hintBlock}`,
         text
       );
       const soql = stripCodeFence(raw);
@@ -143,20 +184,23 @@ export async function generateSoql(naturalLanguage, { preferAi = true, sobjects 
         return {
           soql,
           source: "ai",
+          apiMode: mode,
           notes: ["Generated with AI. Review before running in production."]
         };
       }
     } catch {
-      // fall through to rules
+      /* fall through to rules */
     }
   }
 
-  return ruleBasedSoql(text, sobjects, resolved);
+  const result = ruleBasedSoql(text, sobjects, resolved, mode);
+  return { ...result, apiMode: mode };
 }
 
 /** Exported for tests / UI previews. */
-export function resolveObject(text, sobjects = []) {
+export function resolveObject(text, sobjects = [], apiMode = "rest") {
   const lower = String(text || "").toLowerCase();
+  const mode = apiMode === "tooling" ? "tooling" : "rest";
 
   // 1) Explicit API name in the prompt (highest priority)
   const explicit = String(text || "").match(/\b([A-Za-z][A-Za-z0-9_]*__(?:c|mdt|e|kav|x|b|p))\b/);
@@ -169,26 +213,32 @@ export function resolveObject(text, sobjects = []) {
       score: 100
     };
   }
+  // Tooling-style PascalCase API names when listed in describe
+  const pascal = String(text || "").match(/\b([A-Z][A-Za-z0-9_]{2,})\b/);
+  if (pascal && mode === "tooling") {
+    const hit = (sobjects || []).find((o) => o.name === pascal[1]);
+    if (hit) return { objectName: hit.name, via: "api-name", score: 98 };
+  }
 
-  // 2) Match against org describe (labels + API names) — beats generic aliases
+  // 2) Match against org describe (labels + API names)
   const orgHit = matchOrgObject(text, sobjects);
   if (orgHit && orgHit.score >= 70) return orgHit;
 
-  // 3) Standard aliases (Account, Case, …). Skip Product2 if org matched a *Product* custom object weakly,
-  // or if the phrase has a qualifier before "product(s)" (e.g. "sap products").
-  for (const [alias, api] of Object.entries(OBJECT_ALIASES)) {
-    if (!new RegExp(`\\b${alias}\\b`, "i").test(lower)) continue;
-    if ((alias === "product" || alias === "products") && hasProductQualifier(lower)) {
-      // Try a looser org match before falling through to Product2
+  // 3) Mode-specific aliases (longest keys first for multi-word tooling phrases)
+  const aliases = mode === "tooling" ? TOOLING_ALIASES : OBJECT_ALIASES;
+  const aliasKeys = Object.keys(aliases).sort((a, b) => b.length - a.length);
+  for (const alias of aliasKeys) {
+    if (!new RegExp(`\\b${alias.replace(/\s+/g, "\\s+")}\\b`, "i").test(lower)) continue;
+    if (mode === "rest" && (alias === "product" || alias === "products") && hasProductQualifier(lower)) {
       if (orgHit) return orgHit;
       continue;
     }
-    return { objectName: api, via: "alias", score: 60 };
+    return { objectName: aliases[alias], via: "alias", score: 60 };
   }
 
   if (orgHit) return orgHit;
 
-  // 4) No org list: guess CustomObject__c from multi-word phrases ("sap products" → Sap_Product__c)
+  // 4) Guess custom object / custom metadata API name
   const guessed = guessCustomObjectApi(text);
   if (guessed) return { objectName: guessed, via: "guessed-api", score: 55 };
 
@@ -196,13 +246,16 @@ export function resolveObject(text, sobjects = []) {
 }
 
 function guessCustomObjectApi(text) {
-  const words = significantPhrase(text)
-    .split(/\s+/)
-    .filter(Boolean);
-  if (words.length < 2) return null;
-  // Avoid guessing from purely standard phrases already covered by aliases
-  const joined = words.join(" ");
-  if (/^(accounts?|contacts?|leads?|opportunit(?:y|ies)|cases?|users?|tasks?)$/i.test(joined)) {
+  const lower = String(text || "").toLowerCase();
+  const wantsMdt = /\b(custom\s+metadata|metadata\s+type|cmdt|__mdt)\b/i.test(lower);
+  let phrase = significantPhrase(text)
+    .replace(/\b(custom\s+metadata|metadata|cmdt|type|types|records?)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = phrase.split(/\s+/).filter(Boolean);
+  if (words.length < 1) return null;
+  if (words.length === 1 && !wantsMdt) return null;
+  if (/^(accounts?|contacts?|leads?|opportunit(?:y|ies)|cases?|users?|tasks?)$/i.test(words.join(" "))) {
     return null;
   }
   const singular = words.map((w, i) => {
@@ -214,8 +267,9 @@ function guessCustomObjectApi(text) {
     }
     return x.charAt(0).toUpperCase() + x.slice(1).toLowerCase();
   });
-  const api = `${singular.join("_")}__c`;
-  if (!/^[A-Za-z][A-Za-z0-9_]*__c$/.test(api)) return null;
+  const suffix = wantsMdt ? "__mdt" : "__c";
+  const api = `${singular.join("_")}${suffix}`;
+  if (!new RegExp(`^[A-Za-z][A-Za-z0-9_]*${suffix}$`).test(api)) return null;
   return api;
 }
 
@@ -250,8 +304,10 @@ function matchOrgObject(text, sobjects) {
     else if (pluralKey.length >= 4 && textNorm.includes(pluralKey)) score = 78;
     else if (fullNameKey.length >= 6 && textNorm.includes(fullNameKey)) score = 75;
 
-    // Prefer custom objects slightly when scores tie-ish
+    // Prefer custom objects / CMDT when scores tie-ish
     if (score && /__c$/i.test(name)) score += 2;
+    if (score && /__mdt$/i.test(name)) score += 3;
+    if (score && /__mdt$/i.test(name) && /\b(metadata|cmdt)\b/i.test(text)) score += 8;
 
     if (!best || score > best.score) {
       best = { objectName: name, via: "org-describe", score, label: obj.label || "" };
@@ -284,7 +340,7 @@ function significantPhrase(text) {
 export function normalizeKey(value) {
   return String(value || "")
     .toLowerCase()
-    .replace(/__c$/i, "")
+    .replace(/__(c|mdt|e|kav|x|b|p)$/i, "")
     .replace(/[^a-z0-9]/g, "");
 }
 
@@ -301,7 +357,7 @@ function buildObjectHints(text, sobjects, resolved) {
   const scored = [];
   for (const obj of list) {
     if (!obj?.name || obj.queryable === false) continue;
-    if (!/__c$/i.test(obj.name) && !/__/i.test(obj.name)) continue;
+    if (!/__(c|mdt)$/i.test(obj.name) && !/__/i.test(obj.name)) continue;
     const hit = matchOrgObject(text, [obj]);
     if (hit && hit.score >= 60) scored.push([hit.score, obj.name]);
   }
@@ -313,9 +369,10 @@ function buildObjectHints(text, sobjects, resolved) {
   return hints;
 }
 
-function ruleBasedSoql(text, sobjects = [], resolved = null) {
+function ruleBasedSoql(text, sobjects = [], resolved = null, apiMode = "rest") {
   const notes = [];
   const lower = text.toLowerCase();
+  const mode = apiMode === "tooling" ? "tooling" : "rest";
 
   let limit = 100;
   const lim =
@@ -326,7 +383,7 @@ function ruleBasedSoql(text, sobjects = [], resolved = null) {
 
   const countOnly = /\b(count|how many|number of)\b/.test(lower);
 
-  const resolvedObj = resolved || resolveObject(text, sobjects);
+  const resolvedObj = resolved || resolveObject(text, sobjects, mode);
   let objectName = resolvedObj.objectName;
   if (objectName) {
     if (resolvedObj.via === "org-describe") {
@@ -337,18 +394,29 @@ function ruleBasedSoql(text, sobjects = [], resolved = null) {
       notes.push(`Used API name ${objectName} from your prompt.`);
     } else if (resolvedObj.via === "guessed-api") {
       notes.push(
-        `Guessed custom object ${objectName} from your wording. If wrong, use the exact API name or keep a Salesforce tab open so OrgKit can match labels.`
+        `Guessed ${objectName} from your wording. If wrong, use the exact API name or keep a Salesforce tab open.`
       );
+    } else if (resolvedObj.via === "alias" && mode === "tooling") {
+      notes.push(`Tooling object ${objectName}.`);
     }
   } else {
-    objectName = "Account";
+    objectName = mode === "tooling" ? "ApexClass" : "Account";
     notes.push(
-      "Could not detect object; defaulted to Account. Use the API name (e.g. SAP_Product__c) or open a Salesforce tab so OrgKit can match custom objects."
+      mode === "tooling"
+        ? "Could not detect Tooling object; defaulted to ApexClass. Name the API (e.g. ApexClass, Flow)."
+        : "Could not detect object; defaulted to Account. Use an API name (e.g. MyType__mdt) or open a Salesforce tab."
     );
   }
 
   const fields = ["Id"];
-  if (objectName === "User") fields.push("Name", "Username", "Email", "IsActive");
+  if (/__mdt$/i.test(objectName)) fields.push("DeveloperName", "MasterLabel");
+  else if (objectName === "ApexClass" || objectName === "ApexTrigger") fields.push("Name", "NamespacePrefix", "ApiVersion", "Status");
+  else if (objectName === "Flow" || objectName === "FlowDefinition") fields.push("DeveloperName", "MasterLabel", "ManageableState");
+  else if (objectName === "CustomObject") fields.push("DeveloperName", "NamespacePrefix", "ManageableState");
+  else if (objectName === "CustomField") fields.push("DeveloperName", "TableEnumOrId", "ManageableState");
+  else if (objectName === "LightningComponentBundle" || objectName === "AuraDefinitionBundle") {
+    fields.push("DeveloperName", "NamespacePrefix", "ApiVersion");
+  } else if (objectName === "User") fields.push("Name", "Username", "Email", "IsActive");
   else if (objectName === "Case") fields.push("CaseNumber", "Subject", "Status", "Priority");
   else if (objectName === "Opportunity") fields.push("Name", "StageName", "Amount", "CloseDate");
   else if (objectName === "Task") fields.push("Subject", "Status", "Priority", "ActivityDate");
@@ -358,11 +426,17 @@ function ruleBasedSoql(text, sobjects = [], resolved = null) {
   if (/\bphone\b/.test(lower) && !fields.includes("Phone")) fields.push("Phone");
   if (/\bindustr/.test(lower) && objectName === "Account") fields.push("Industry");
 
+  if (mode === "tooling") notes.push("Tooling API mode.");
+  if (/__mdt$/i.test(objectName)) {
+    notes.push("Custom metadata type — query via standard API; All data can update records via Tooling CustomMetadata.");
+  }
+
   const wheres = [];
 
   const named = text.match(/(?:named|name(?:\s+is|\s+equals)?|called)\s+["']?([^"'\n,]+?)["']?(?:\s|$)/i);
   if (named) {
-    wheres.push(`Name LIKE '%${escapeSoql(named[1].trim())}%'`);
+    const col = /__mdt$/i.test(objectName) ? "DeveloperName" : "Name";
+    wheres.push(`${col} LIKE '%${escapeSoql(named[1].trim())}%'`);
   }
 
   const email = text.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);

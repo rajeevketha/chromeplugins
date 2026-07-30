@@ -76,7 +76,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
     fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.6.2",
+      version: "1.6.3",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       hasExecuteAnonymous: typeof executeAnonymous === "function",
@@ -500,12 +500,85 @@ async function updateSObject(
   }
   if (!Object.keys(body).length) throw new Error("No updatable fields provided.");
 
+  // Custom metadata records: standard sObject PATCH is usually blocked — use Tooling CustomMetadata.
+  if (/__mdt$/i.test(type) && !tooling) {
+    return updateCustomMetadataRecord(tabUrl, type, recordId, body, apiVersion);
+  }
+
   const { session } = await requireSession(tabUrl);
   await ensureHostFetchAllowed(session.apiBase);
   const prefix = tooling ? "/tooling" : "";
   const url = restUrl(session.apiBase, `${prefix}/sobjects/${type}/${recordId}`, apiVersion);
   await sfFetchUrl(url, session.sid, { method: "PATCH", body });
   return { ok: true, id: recordId, sobject: type, fields: Object.keys(body) };
+}
+
+/**
+ * Update a Custom Metadata Type record via Tooling API CustomMetadata.
+ * FullName format: MyType__mdt.RecordDeveloperName
+ */
+async function updateCustomMetadataRecord(tabUrl, sobject, id, fields, apiVersion) {
+  const current = await getSObject(tabUrl, sobject, id, apiVersion, false);
+  const developerName = current?.DeveloperName;
+  if (!developerName || !/^[A-Za-z][A-Za-z0-9_]*$/.test(developerName)) {
+    throw new Error("Custom metadata record is missing DeveloperName; cannot update via Tooling.");
+  }
+  const label =
+    fields.MasterLabel ??
+    fields.Label ??
+    current.MasterLabel ??
+    current.Label ??
+    developerName;
+
+  const skip = new Set([
+    "Id",
+    "DeveloperName",
+    "QualifiedApiName",
+    "NamespacePrefix",
+    "MasterLabel",
+    "Label",
+    "Language",
+    "SystemModstamp",
+    "CreatedDate",
+    "CreatedById",
+    "LastModifiedDate",
+    "LastModifiedById",
+    "attributes"
+  ]);
+  const values = [];
+  for (const [key, value] of Object.entries(fields)) {
+    if (skip.has(key)) continue;
+    values.push({
+      field: key,
+      value: value === null || value === undefined ? null : value
+    });
+  }
+
+  const { session } = await requireSession(tabUrl);
+  await ensureHostFetchAllowed(session.apiBase);
+  const fullName = `${sobject}.${developerName}`;
+  const url = restUrl(
+    session.apiBase,
+    `/tooling/sobjects/CustomMetadata/${encodeURIComponent(sobject)}.${encodeURIComponent(developerName)}`,
+    apiVersion
+  );
+  await sfFetchUrl(url, session.sid, {
+    method: "PATCH",
+    body: {
+      Metadata: {
+        label: String(label),
+        values
+      }
+    }
+  });
+  return {
+    ok: true,
+    id,
+    sobject,
+    fields: Object.keys(fields),
+    via: "tooling-custom-metadata",
+    fullName
+  };
 }
 
 async function deleteSObject(tabUrl, sobject, id, apiVersion = DEFAULT_API_VERSION, tooling = false) {

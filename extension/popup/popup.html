@@ -47,9 +47,18 @@
 
   <!-- FEATURE: NL SOQL -->
   <section id="view-nl-soql" class="view">
+    <div class="row wrap" style="margin-bottom:8px">
+      <label class="label tight" for="nlApiMode">API</label>
+      <select id="nlApiMode" class="select" title="Standard objects / custom metadata, or Tooling API">
+        <option value="rest">Standard / CMDT</option>
+        <option value="tooling">Tooling API</option>
+      </select>
+    </div>
     <label class="label" for="nlInput">Describe the data you need</label>
-    <textarea id="nlInput" class="textarea" rows="3" placeholder="Show me all SAP products&#10;or: SELECT from SAP_Product__c created this week"></textarea>
-    <p class="hint">Uses your org’s object list so custom objects (e.g. <code>SAP_Product__c</code>) match phrases like “sap products”. AI is optional.</p>
+    <textarea id="nlInput" class="textarea" rows="3" placeholder="Show open Cases created this week"></textarea>
+    <p class="hint">
+      Standard mode includes custom objects and custom metadata (__mdt). Tooling mode matches ApexClass, Flow, CustomObject, and other Tooling entities.
+    </p>
     <div class="row">
       <button type="button" class="btn primary" id="genSoql">Generate SOQL</button>
       <button type="button" class="btn" id="runGenSoql">Run</button>
@@ -249,13 +258,13 @@
         id="soqlObjectHint"
         class="input grow"
         list="soqlObjectList"
-        placeholder="Object API name (Account, ApexClass…)"
+        placeholder="Object API name"
         autocomplete="off"
       />
       <datalist id="soqlObjectList"></datalist>
       <button type="button" class="btn" id="soqlLoadFields" title="Load fields for autocomplete">Load fields</button>
     </div>
-    <p class="hint" id="soqlAssistHint">Field suggestions appear as you type. Choose Standard or Tooling for the object API.</p>
+    <p class="hint" id="soqlAssistHint">Field suggestions appear as you type. Choose Standard or Tooling for the object API. Custom metadata (__mdt) uses Standard.</p>
     <label class="label" for="soqlInput">SOQL</label>
     <div class="soql-editor">
       <textarea id="soqlInput" class="textarea" rows="5" placeholder="SELECT Id, Name FROM Account LIMIT 10" spellcheck="false"></textarea>

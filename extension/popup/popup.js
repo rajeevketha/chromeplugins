@@ -50,6 +50,7 @@ import {
 } from "../lib/soql-assist.js";
 import {
   isSalesforceId,
+  isCustomMetadataType,
   detectSObjectType,
   extractRecordId,
   buildRecordEditorFields,
@@ -68,7 +69,7 @@ const FEATURES = [
   { id: "meta-open", title: "Metadata Quick Open", blurb: "Jump to class, flow, LWC…" },
   { id: "package", title: "Package.xml Builder", blurb: "Multi-select → package.xml" },
   { id: "flow-clean", title: "Inactive Flow Cleaner", blurb: "Delete versions blocking fields" },
-  { id: "nl-soql", title: "NL → SOQL", blurb: "Custom objects + optional AI" },
+  { id: "nl-soql", title: "NL → SOQL", blurb: "Standard, CMDT, Tooling + optional AI" },
   { id: "flow", title: "Flow Analyzer", blurb: "Spot DML-in-loop & fault gaps" },
   { id: "governor", title: "Governor Predictor", blurb: "Estimate limit risk in Apex" },
   { id: "errors", title: "Error Decoder", blurb: "Explain Salesforce exceptions" },
@@ -131,6 +132,8 @@ const state = {
     updateable: false
   },
   lastGenSoql: "",
+  lastGenApiMode: "rest",
+  toolingObjects: null,
   lastFormula: "",
   deployChecked: [],
   deploySignals: {},
@@ -395,11 +398,14 @@ async function handleQueryExport(kind, table, json, statusEl) {
   }
 }
 
-function renderQueryResult(panel, statusEl, key, queryResult, soqlText = "") {
+function renderQueryResult(panel, statusEl, key, queryResult, soqlText = "", options = {}) {
   const table = recordsToTable(queryResult);
   const records = Array.isArray(queryResult?.records) ? queryResult.records : [];
   const sobjectType = detectSObjectType(queryResult, soqlText);
-  const tooling = key === "soql" && soqlApiMode() === "tooling";
+  const tooling =
+    options.tooling === true ||
+    (options.tooling !== false && key === "soql" && soqlApiMode() === "tooling") ||
+    (key === "nl" && state.lastGenApiMode === "tooling");
   state.lastQueryTables[key] = table;
   state.lastQueryJson[key] = JSON.stringify(queryResult, null, 2);
   state.lastQueryRecords[key] = { records, sobjectType, tooling, soqlText };
@@ -593,6 +599,10 @@ async function openRecordDrawer({ key, sobject, id, tooling = false }) {
   if (!recordRes.ok) throw new Error(recordRes.error);
 
   const fields = buildRecordEditorFields(describeRes.result, recordRes.result);
+  const cmdt = isCustomMetadataType(sobject);
+  const canUpdate =
+    describeRes.result?.updateable !== false || cmdt || fields.some((f) => f.updateable);
+  const canDelete = describeRes.result?.deletable !== false && !cmdt;
   state.recordEditor = {
     open: true,
     key,
@@ -601,14 +611,17 @@ async function openRecordDrawer({ key, sobject, id, tooling = false }) {
     tooling: !!tooling,
     fields,
     record: recordRes.result,
-    deletable: describeRes.result?.deletable !== false,
-    updateable: describeRes.result?.updateable !== false
+    deletable: canDelete,
+    updateable: canUpdate,
+    isCmdt: cmdt
   };
   $("#recordSave").disabled = !state.recordEditor.updateable;
   $("#recordDelete").disabled = !state.recordEditor.deletable;
   renderRecordFieldList();
   setRecordDrawerStatus(
-    `${fields.length} fields · ${fields.filter((f) => f.updateable).length} editable. Change values then Save, or Delete.`
+    cmdt
+      ? `${fields.length} fields · custom metadata — editable fields save via Tooling CustomMetadata.`
+      : `${fields.length} fields · ${fields.filter((f) => f.updateable).length} editable. Change values then Save, or Delete.`
   );
 }
 
@@ -1028,32 +1041,48 @@ async function onGenSoql() {
   const out = $("#nlSoqlOut");
   out.textContent = "Generating…";
   try {
-    let sobjects = Array.isArray(state.globalObjects) ? state.globalObjects : [];
-    // Need full describe rows (name/label), not just name strings from older cache.
-    if (!sobjects.length || typeof sobjects[0] === "string") {
-      try {
-        out.textContent = "Loading org objects for custom-object matching…";
-        const res = await send("describeGlobal", {
-          tabUrl: await requireTabUrl(),
-          apiVersion: apiVersion()
-        });
-        if (res.ok) {
-          sobjects = res.result?.sobjects || [];
-          state.globalObjects = sobjects;
-          fillDescribeObjectDatalist(sobjects);
-        } else {
-          sobjects = [];
-        }
-      } catch {
-        sobjects = [];
-      }
-    }
-    const result = await generateSoql($("#nlInput").value, { sobjects });
+    const apiMode = nlApiMode();
+    let sobjects = await loadNlSObjects(apiMode);
+    const result = await generateSoql($("#nlInput").value, { sobjects, apiMode });
     state.lastGenSoql = result.soql;
-    out.textContent = `${result.soql}\n\n// source: ${result.source}\n${result.notes.map((n) => `// ${n}`).join("\n")}`;
+    state.lastGenApiMode = result.apiMode || apiMode;
+    out.textContent = `${result.soql}\n\n// source: ${result.source}\n// api: ${state.lastGenApiMode}\n${result.notes
+      .map((n) => `// ${n}`)
+      .join("\n")}`;
   } catch (e) {
     out.textContent = e.message;
   }
+}
+
+function nlApiMode() {
+  return $("#nlApiMode")?.value === "tooling" ? "tooling" : "rest";
+}
+
+async function loadNlSObjects(apiMode) {
+  const tooling = apiMode === "tooling";
+  if (tooling) {
+    if (Array.isArray(state.toolingObjects) && state.toolingObjects.length && typeof state.toolingObjects[0] !== "string") {
+      return state.toolingObjects;
+    }
+  } else if (Array.isArray(state.globalObjects) && state.globalObjects.length && typeof state.globalObjects[0] !== "string") {
+    return state.globalObjects;
+  }
+
+  const out = $("#nlSoqlOut");
+  if (out) out.textContent = tooling ? "Loading Tooling objects…" : "Loading org objects…";
+  const res = await send("describeGlobal", {
+    tabUrl: await requireTabUrl(),
+    apiVersion: apiVersion(),
+    tooling
+  });
+  if (!res.ok) throw new Error(res.error);
+  const sobjects = res.result?.sobjects || [];
+  if (tooling) state.toolingObjects = sobjects;
+  else {
+    state.globalObjects = sobjects;
+    fillDescribeObjectDatalist(sobjects);
+  }
+  return sobjects;
 }
 
 async function onRunGenSoql() {
@@ -1065,13 +1094,14 @@ async function onRunGenSoql() {
   }
   clearQueryResult(panel, status, "nl", "Running…");
   try {
-    const res = await send("runSoql", {
+    const tooling = state.lastGenApiMode === "tooling";
+    const res = await send(tooling ? "toolingQuery" : "runSoql", {
       tabUrl: await requireTabUrl(),
       query: state.lastGenSoql,
       apiVersion: apiVersion()
     });
     if (!res.ok) throw new Error(res.error);
-    renderQueryResult(panel, status, "nl", res.result, state.lastGenSoql);
+    renderQueryResult(panel, status, "nl", res.result, state.lastGenSoql, { tooling });
   } catch (e) {
     clearQueryResult(panel, status, "nl", e.message);
   }

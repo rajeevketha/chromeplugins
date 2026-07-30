@@ -187,7 +187,7 @@ async function init() {
 }
 
 /**
- * Action popups stay compact; opening popup.html as a Chrome tab fills the window.
+ * Action popups stay compact; opening app/index.html as a Chrome tab fills the window.
  */
 async function applyShellMode() {
   let asTab = false;

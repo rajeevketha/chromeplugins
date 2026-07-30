@@ -85,7 +85,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
     fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.6.9",
+      version: "1.7.0",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       hasExecuteAnonymous: typeof executeAnonymous === "function",
@@ -118,7 +118,7 @@ async function getActiveTabOrg() {
 }
 
 async function openOrgKitTab(view) {
-  const base = chrome.runtime.getURL("popup/popup.html");
+  const base = chrome.runtime.getURL("app/index.html");
   const url = view ? `${base}?view=${encodeURIComponent(view)}` : base;
   const all = await chrome.tabs.query({});
   const existing = all.find((t) => typeof t.url === "string" && t.url.startsWith(base));

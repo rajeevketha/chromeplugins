@@ -259,7 +259,7 @@
     } catch (err) {
       // Fallback when service worker is asleep / message fails
       try {
-        window.open(chrome.runtime.getURL("popup/popup.html"), "_blank", "noopener");
+        window.open(chrome.runtime.getURL("app/index.html"), "_blank", "noopener");
       } catch {
         console.warn("OrgKit open failed", err);
       }

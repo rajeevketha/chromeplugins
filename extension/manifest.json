@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "OrgKit",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Salesforce developer toolkit: SOQL, schema, Apex, flows. Uses your open org tab session in-browser only.",
   "icons": {
     "16": "icons/icon16.png",

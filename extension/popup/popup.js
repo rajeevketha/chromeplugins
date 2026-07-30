@@ -151,7 +151,9 @@ const state = {
     suggestions: [],
     activeIndex: 0,
     token: null,
-    loadSeq: 0
+    loadSeq: 0,
+    suppressSuggest: false,
+    suggestTimer: null
   },
   apexClassResults: [],
   orgLimits: null
@@ -1968,14 +1970,22 @@ function bindSoqlAssist() {
 
   let timer = null;
   const schedule = () => {
+    // User is typing again — allow suggestions to reopen.
+    state.soqlAssist.suppressSuggest = false;
     clearTimeout(timer);
+    clearTimeout(state.soqlAssist.suggestTimer);
     timer = setTimeout(() => {
       refreshSoqlSuggestions();
       ensureSoqlFieldsForActiveObject(false).catch(() => {});
     }, 120);
+    state.soqlAssist.suggestTimer = timer;
   };
   input.addEventListener("input", schedule);
-  input.addEventListener("click", schedule);
+  input.addEventListener("click", () => {
+    // Click reposition: refresh only if not just closed by a pick.
+    if (state.soqlAssist.suppressSuggest) return;
+    schedule();
+  });
   input.addEventListener("keyup", (e) => {
     if (["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(e.key)) return;
     schedule();
@@ -2096,7 +2106,7 @@ async function ensureSoqlFieldsForActiveObject(force = false) {
     $("#soqlObjectHint").value = objectName;
   }
   if (hintEl) {
-    hintEl.textContent = `${objectName}: ${fields.length} fields · type in SELECT to autocomplete (inserts FieldName,)`;
+    hintEl.textContent = `${objectName} · ${fields.length} fields available for suggestions.`;
   }
   return fields;
 }
@@ -2122,6 +2132,10 @@ function refreshSoqlSuggestions() {
   const ta = $("#soqlInput");
   const box = $("#soqlSuggest");
   if (!ta || !box) return;
+  if (state.soqlAssist.suppressSuggest) {
+    hideSoqlSuggest();
+    return;
+  }
   const tokenInfo = getTokenAtCursor(ta.value, ta.selectionStart);
   state.soqlAssist.token = tokenInfo;
 
@@ -2145,6 +2159,16 @@ function refreshSoqlSuggestions() {
       tokenInfo.token,
       40
     );
+    // Exact object already chosen — close list
+    if (
+      tokenInfo.token &&
+      state.soqlAssist.objectNames.some((n) => n.toLowerCase() === tokenInfo.token.toLowerCase()) &&
+      items.length === 1 &&
+      items[0].name.toLowerCase() === tokenInfo.token.toLowerCase()
+    ) {
+      hideSoqlSuggest();
+      return;
+    }
   }
 
   state.soqlAssist.suggestions = items;
@@ -2188,6 +2212,7 @@ function hideSoqlSuggest() {
     box.replaceChildren();
   }
   state.soqlAssist.suggestions = [];
+  state.soqlAssist.activeIndex = 0;
 }
 
 function onSoqlSuggestKeydown(e) {
@@ -2207,6 +2232,7 @@ function onSoqlSuggestKeydown(e) {
     applySoqlSuggestion(state.soqlAssist.activeIndex);
   } else if (e.key === "Escape") {
     e.preventDefault();
+    state.soqlAssist.suppressSuggest = true;
     hideSoqlSuggest();
   }
 }
@@ -2223,16 +2249,15 @@ function applySoqlSuggestion(index) {
   ta.value = text;
   ta.focus();
   ta.setSelectionRange(cursor, cursor);
+
+  // Close and stay closed until the user types again (do not auto-reopen).
+  state.soqlAssist.suppressSuggest = true;
+  clearTimeout(state.soqlAssist.suggestTimer);
+  hideSoqlSuggest();
+
   if (tokenInfo.context === "from") {
     if ($("#soqlObjectHint")) $("#soqlObjectHint").value = item.name;
-    ensureSoqlFieldsForActiveObject(true)
-      .then(() => refreshSoqlSuggestions())
-      .catch(() => {});
-  }
-  hideSoqlSuggest();
-  // Re-open suggestions for next field after comma
-  if (appendComma) {
-    setTimeout(() => refreshSoqlSuggestions(), 0);
+    ensureSoqlFieldsForActiveObject(true).catch(() => {});
   }
 }
 

@@ -1,7 +1,8 @@
 # Git + Files locations
 
-- Branch: `cursor/salesforce-dev-chrome-extension-f713` (pushed)
+- Branches: `main` and `cursor/salesforce-dev-chrome-extension-f713` (1.7.0 pushed)
 - Pack in repo: `extension/store/submission/`
-- Upload zip: `OrgKit-1.6.9-store.zip`
-- Full pack zip in agent Files: `OrgKit-CWS-1.6.9.zip`
-- Runtime test zip: `OrgKit-1.6.9.zip` / `OrgKit-latest.zip`
+- Upload zip: `OrgKit-1.7.0-store.zip`
+- Full pack: `OrgKit-CWS-1.7.0.zip`
+- Runtime test: `OrgKit-1.7.0.zip` / `OrgKit-latest.zip`
+- Privacy: https://rajeevketha.github.io/chromeplugins/extension/privacy.html

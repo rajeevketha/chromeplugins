@@ -28,6 +28,11 @@ Also includes Setup quick links, SOQL runner, record ID tools, favorites, org ba
 1. Chrome → `chrome://extensions`
 2. Enable **Developer mode**
 3. **Load unpacked** → select the `extension/` folder
+4. Pin **OrgKit** to the toolbar
+5. Set **Site access** → **On all sites** (needed for SOQL/API calls)
+6. Open a Salesforce tab, then click the OrgKit icon (or press **Alt+Shift+O**, or the blue **OrgKit** button on the floating toolbar)
+
+OrgKit opens in a **full browser tab** (not a small popup).
 4. Open a logged-in Salesforce tab → click the extension icon
 
 ## Optional AI

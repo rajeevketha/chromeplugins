@@ -1,0 +1,109 @@
+:root {
+  --bg: #0b1624;
+  --card: #132538;
+  --border: #2a4a6b;
+  --text: #e8eef6;
+  --muted: #8fa6c1;
+  --accent: #0176d3;
+  --danger: #c23934;
+  --font: "Source Sans 3", "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font);
+  color: var(--text);
+  background:
+    radial-gradient(80% 50% at 10% 0%, rgba(1, 118, 211, 0.25), transparent 55%),
+    linear-gradient(180deg, #10233a, var(--bg));
+}
+
+.wrap {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 20px 60px;
+}
+
+header {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+
+h2 {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+}
+
+.check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 10px 0;
+  cursor: pointer;
+}
+
+label[for="apiVersion"] {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+
+select {
+  width: 100%;
+  max-width: 200px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0f1c2e;
+  color: var(--text);
+  font: inherit;
+}
+
+.muted {
+  color: var(--muted);
+  margin-top: 0;
+}
+
+.btn {
+  border: 1px solid var(--border);
+  background: #1c3552;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn.danger {
+  border-color: rgba(194, 57, 52, 0.6);
+  color: #ffb4b0;
+}
+
+.status {
+  min-height: 1.2em;
+  color: #7dcea0;
+}

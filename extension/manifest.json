@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "SF Dev Toolkit",
+  "version": "1.0.0",
+  "description": "Day-to-day Salesforce developer toolkit: quick Setup links, org badge, record ID tools, SOQL runner, and favorites.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    },
+    "default_title": "SF Dev Toolkit"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "options_page": "options/options.html",
+  "permissions": [
+    "activeTab",
+    "cookies",
+    "storage",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.salesforce.com/*",
+    "https://*.force.com/*",
+    "https://*.cloudforce.com/*",
+    "https://*.salesforce-setup.com/*",
+    "https://*.visualforce.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.salesforce.com/*",
+        "https://*.force.com/*",
+        "https://*.cloudforce.com/*",
+        "https://*.salesforce-setup.com/*",
+        "https://*.visualforce.com/*"
+      ],
+      "js": ["content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": [
+        "https://*.salesforce.com/*",
+        "https://*.force.com/*",
+        "https://*.cloudforce.com/*",
+        "https://*.salesforce-setup.com/*"
+      ]
+    }
+  ]
+}

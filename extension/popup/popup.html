@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SF Dev Toolkit</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="brand">
+      <img src="../icons/icon32.png" alt="" width="20" height="20" />
+      <span>SF Dev Toolkit</span>
+    </div>
+    <button type="button" class="icon-btn" id="openOptions" title="Settings">⚙</button>
+  </header>
+
+  <section id="orgBanner" class="org-banner muted">
+    <div class="org-top">
+      <span id="envPill" class="pill">—</span>
+      <span id="orgHost" class="org-host">Open a Salesforce tab</span>
+    </div>
+    <div id="orgMeta" class="org-meta"></div>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" class="tab active" data-tab="links">Links</button>
+    <button type="button" class="tab" data-tab="soql">SOQL</button>
+    <button type="button" class="tab" data-tab="ids">IDs</button>
+    <button type="button" class="tab" data-tab="favs">Favs</button>
+  </nav>
+
+  <main>
+    <section id="panel-links" class="panel active">
+      <input type="search" id="linkSearch" class="input" placeholder="Filter quick links…" autocomplete="off" />
+      <div id="linkList" class="link-list"></div>
+    </section>
+
+    <section id="panel-soql" class="panel">
+      <label class="label" for="soqlInput">Query</label>
+      <textarea id="soqlInput" class="textarea" rows="5" placeholder="SELECT Id, Name FROM Account LIMIT 10"></textarea>
+      <div class="row">
+        <select id="apiVersion" class="select" title="API version"></select>
+        <button type="button" class="btn primary" id="runSoql">Run</button>
+        <button type="button" class="btn" id="copySoqlResult" title="Copy JSON">Copy</button>
+      </div>
+      <pre id="soqlResult" class="result" aria-live="polite"></pre>
+    </section>
+
+    <section id="panel-ids" class="panel">
+      <label class="label" for="idInput">Record ID (15 or 18)</label>
+      <div class="row">
+        <input type="text" id="idInput" class="input grow" placeholder="001…" spellcheck="false" />
+        <button type="button" class="btn primary" id="openRecord">Open</button>
+      </div>
+      <div id="idInfo" class="id-info"></div>
+      <div class="row wrap">
+        <button type="button" class="btn" id="copy15">Copy 15</button>
+        <button type="button" class="btn" id="copy18">Copy 18</button>
+        <button type="button" class="btn" id="scanPageIds">Scan page</button>
+      </div>
+      <ul id="scannedIds" class="scanned"></ul>
+    </section>
+
+    <section id="panel-favs" class="panel">
+      <div class="row">
+        <input type="text" id="favLabel" class="input grow" placeholder="Label" />
+      </div>
+      <div class="row">
+        <input type="text" id="favPath" class="input grow" placeholder="Path or full URL" />
+        <button type="button" class="btn primary" id="addFav">Add</button>
+      </div>
+      <ul id="favList" class="fav-list"></ul>
+      <p class="hint">Tip: click “Save current page” to bookmark this Setup screen.</p>
+      <button type="button" class="btn block" id="saveCurrent">Save current page</button>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <button type="button" class="btn block" id="openDevConsole">Developer Console</button>
+  </footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

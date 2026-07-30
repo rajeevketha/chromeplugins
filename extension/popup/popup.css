@@ -197,7 +197,7 @@ html.shell-wide .link-list {
 }
 
 .trust-card {
-  margin: 0 0 12px;
+  margin: 12px 0 0;
   padding: 10px 12px;
   border: 1px solid rgba(1, 118, 211, 0.35);
   border-radius: 10px;

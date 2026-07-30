@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "OrgKit",
-  "version": "1.5.4",
-  "description": "OrgKit — Salesforce tools: NL→SOQL custom objects, field autocomplete, Tooling queries, Excel export.",
+  "version": "1.5.5",
+  "description": "OrgKit — SOQL results with Open/All data edit-delete, NL custom objects, Tooling, Excel export.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",

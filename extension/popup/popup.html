@@ -330,6 +330,28 @@
     <button type="button" class="btn block" id="saveCurrent">Save current page</button>
   </section>
 
+  <!-- Record detail / edit drawer -->
+  <div id="recordDrawer" class="record-drawer hidden" aria-hidden="true">
+    <div class="record-drawer-backdrop" data-record-close></div>
+    <div class="record-drawer-panel" role="dialog" aria-labelledby="recordDrawerTitle">
+      <div class="record-drawer-header">
+        <div>
+          <div class="label" id="recordDrawerTitle">Record</div>
+          <div class="hint" id="recordDrawerSub"></div>
+        </div>
+        <button type="button" class="btn ghost" data-record-close title="Close">Close</button>
+      </div>
+      <div class="record-drawer-actions row wrap">
+        <button type="button" class="btn" id="recordOpenSf">Open in Salesforce</button>
+        <button type="button" class="btn primary" id="recordSave">Save changes</button>
+        <button type="button" class="btn danger" id="recordDelete">Delete</button>
+      </div>
+      <div id="recordDrawerStatus" class="query-status"></div>
+      <input type="search" id="recordFieldFilter" class="input" placeholder="Filter fields…" />
+      <div id="recordFieldList" class="record-field-list"></div>
+    </div>
+  </div>
+
   <script type="module" src="popup.js"></script>
 </body>
 </html>

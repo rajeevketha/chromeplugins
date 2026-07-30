@@ -49,19 +49,26 @@ import {
   isValidSObjectName
 } from "../lib/soql-assist.js";
 import {
+  isSalesforceId,
+  detectSObjectType,
+  extractRecordId,
+  buildRecordEditorFields,
+  buildUpdatePayload
+} from "../lib/record-editor.js";
+import {
   APEX_SNIPPETS,
   summarizeExecuteAnonymous,
   extractDebugOutput
 } from "../lib/anonymous-apex.js";
 
 const FEATURES = [
-  { id: "soql-run", title: "SOQL Runner", blurb: "Field autocomplete, Tooling, Excel" },
+  { id: "soql-run", title: "SOQL Runner", blurb: "Autocomplete, All data edit, Tooling" },
   { id: "anon-apex", title: "Anonymous Apex", blurb: "Execute + pull debug output" },
   { id: "describe", title: "Describe Browser", blurb: "Fields, picklists, dependencies" },
   { id: "meta-open", title: "Metadata Quick Open", blurb: "Jump to class, flow, LWC…" },
   { id: "package", title: "Package.xml Builder", blurb: "Multi-select → package.xml" },
   { id: "flow-clean", title: "Inactive Flow Cleaner", blurb: "Delete versions blocking fields" },
-  { id: "nl-soql", title: "NL → SOQL", blurb: "Natural language to SOQL" },
+  { id: "nl-soql", title: "NL → SOQL", blurb: "Custom objects + optional AI" },
   { id: "flow", title: "Flow Analyzer", blurb: "Spot DML-in-loop & fault gaps" },
   { id: "governor", title: "Governor Predictor", blurb: "Estimate limit risk in Apex" },
   { id: "errors", title: "Error Decoder", blurb: "Explain Salesforce exceptions" },
@@ -108,6 +115,21 @@ const state = {
     soql: null,
     nl: null
   },
+  lastQueryRecords: {
+    soql: null,
+    nl: null
+  },
+  recordEditor: {
+    open: false,
+    key: null,
+    sobject: null,
+    id: null,
+    tooling: false,
+    fields: [],
+    record: null,
+    deletable: false,
+    updateable: false
+  },
   lastGenSoql: "",
   lastFormula: "",
   deployChecked: [],
@@ -148,6 +170,7 @@ async function init() {
   bindNav();
   bindFeatureActions();
   bindUtilityActions();
+  bindRecordDrawer();
   fillApiVersions();
   fillMetaTypeSelect();
   fillPackageTypeSelect();
@@ -370,10 +393,14 @@ async function handleQueryExport(kind, table, json, statusEl) {
   }
 }
 
-function renderQueryResult(panel, statusEl, key, queryResult) {
+function renderQueryResult(panel, statusEl, key, queryResult, soqlText = "") {
   const table = recordsToTable(queryResult);
+  const records = Array.isArray(queryResult?.records) ? queryResult.records : [];
+  const sobjectType = detectSObjectType(queryResult, soqlText);
+  const tooling = key === "soql" && soqlApiMode() === "tooling";
   state.lastQueryTables[key] = table;
   state.lastQueryJson[key] = JSON.stringify(queryResult, null, 2);
+  state.lastQueryRecords[key] = { records, sobjectType, tooling, soqlText };
   state.lastSoqlJson = state.lastQueryJson[key];
 
   if (!panel) return;
@@ -382,9 +409,10 @@ function renderQueryResult(panel, statusEl, key, queryResult) {
   const wrap = panel.querySelector("[data-query-table]");
   if (meta) {
     const more = table.done === false ? " · more rows available" : "";
+    const typeBit = sobjectType ? ` · ${sobjectType}` : "";
     meta.textContent = `${table.recordCount} row${table.recordCount === 1 ? "" : "s"} · ${table.columns.length} column${
       table.columns.length === 1 ? "" : "s"
-    }${typeof table.totalSize === "number" ? ` · totalSize ${table.totalSize}` : ""}${more}`;
+    }${typeof table.totalSize === "number" ? ` · totalSize ${table.totalSize}` : ""}${typeBit}${more}`;
   }
   if (!wrap) return;
   wrap.replaceChildren();
@@ -398,10 +426,14 @@ function renderQueryResult(panel, statusEl, key, queryResult) {
     return;
   }
 
+  const idColIdx = table.columns.findIndex((c) => c === "Id");
   const tableEl = document.createElement("table");
   tableEl.className = "query-table";
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
+  const thAct = document.createElement("th");
+  thAct.textContent = "Actions";
+  headRow.appendChild(thAct);
   for (const col of table.columns) {
     const th = document.createElement("th");
     th.textContent = col;
@@ -412,24 +444,101 @@ function renderQueryResult(panel, statusEl, key, queryResult) {
   tableEl.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  for (const row of table.rows) {
+  table.rows.forEach((row, rowIdx) => {
     const tr = document.createElement("tr");
-    for (const cell of row) {
+    const record = records[rowIdx] || null;
+    const recordId = extractRecordId(record, row, table.columns);
+    const type = record?.attributes?.type || sobjectType;
+
+    const tdAct = document.createElement("td");
+    tdAct.className = "actions";
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+    if (recordId && type) {
+      const openBtn = document.createElement("button");
+      openBtn.type = "button";
+      openBtn.className = "btn";
+      openBtn.textContent = "Open";
+      openBtn.title = "Open in Salesforce";
+      openBtn.addEventListener("click", () => {
+        openQueryRecord(recordId).catch((e) => {
+          if (statusEl) statusEl.textContent = e.message;
+        });
+      });
+      const allBtn = document.createElement("button");
+      allBtn.type = "button";
+      allBtn.className = "btn primary";
+      allBtn.textContent = "All data";
+      allBtn.title = "Show all fields — edit or delete";
+      allBtn.addEventListener("click", () => {
+        openRecordDrawer({
+          key,
+          sobject: type,
+          id: recordId,
+          tooling
+        }).catch((e) => {
+          if (statusEl) statusEl.textContent = e.message;
+        });
+      });
+      actions.appendChild(openBtn);
+      actions.appendChild(allBtn);
+    } else {
+      const miss = document.createElement("span");
+      miss.className = "hint";
+      miss.textContent = "Add Id";
+      miss.title = "Include Id in SELECT to open / edit records";
+      actions.appendChild(miss);
+    }
+    tdAct.appendChild(actions);
+    tr.appendChild(tdAct);
+
+    row.forEach((cell, colIdx) => {
       const td = document.createElement("td");
-      td.textContent = cell;
+      if (colIdx === idColIdx && isSalesforceId(cell)) {
+        const a = document.createElement("a");
+        a.href = "#";
+        a.className = "record-id-link";
+        a.textContent = cell;
+        a.title = "Open in Salesforce";
+        a.addEventListener("click", (e) => {
+          e.preventDefault();
+          openQueryRecord(cell).catch((err) => {
+            if (statusEl) statusEl.textContent = err.message;
+          });
+        });
+        td.appendChild(a);
+      } else {
+        td.textContent = cell;
+      }
       td.title = cell;
       tr.appendChild(td);
-    }
+    });
     tbody.appendChild(tr);
-  }
+  });
   tableEl.appendChild(tbody);
   wrap.appendChild(tableEl);
-  if (statusEl) statusEl.textContent = "Export or copy when ready.";
+  if (statusEl) {
+    statusEl.textContent = recordIdHint(table)
+      ? "Click Id / Open for Lightning, or All data to view every field and edit/delete."
+      : "Include Id in SELECT to enable Open and All data.";
+  }
+}
+
+function recordIdHint(table) {
+  return table.columns.includes("Id");
+}
+
+async function openQueryRecord(recordId) {
+  await refreshOrg();
+  if (!state.org) throw new Error("Open a Salesforce org tab first.");
+  const url = buildRecordUrl(state.org, recordId, true);
+  await chrome.tabs.create({ url });
 }
 
 function clearQueryResult(panel, statusEl, key, message) {
   state.lastQueryTables[key] = null;
   state.lastQueryJson[key] = "";
+  state.lastQueryRecords[key] = null;
   if (panel) {
     panel.classList.add("hidden");
     const wrap = panel.querySelector("[data-query-table]");
@@ -438,6 +547,205 @@ function clearQueryResult(panel, statusEl, key, message) {
     if (meta) meta.textContent = "";
   }
   if (statusEl) statusEl.textContent = message || "";
+}
+
+function bindRecordDrawer() {
+  const drawer = $("#recordDrawer");
+  if (!drawer) return;
+  drawer.querySelectorAll("[data-record-close]").forEach((el) => {
+    el.addEventListener("click", () => closeRecordDrawer());
+  });
+  $("#recordOpenSf")?.addEventListener("click", async () => {
+    try {
+      if (!state.recordEditor.id) return;
+      await openQueryRecord(state.recordEditor.id);
+    } catch (e) {
+      setRecordDrawerStatus(e.message);
+    }
+  });
+  $("#recordSave")?.addEventListener("click", () => saveRecordDrawer().catch((e) => setRecordDrawerStatus(e.message)));
+  $("#recordDelete")?.addEventListener("click", () => deleteRecordDrawer().catch((e) => setRecordDrawerStatus(e.message)));
+  $("#recordFieldFilter")?.addEventListener("input", () => renderRecordFieldList());
+}
+
+async function openRecordDrawer({ key, sobject, id, tooling = false }) {
+  if (!sobject || !id) throw new Error("Record type and Id are required.");
+  const drawer = $("#recordDrawer");
+  const status = $("#recordDrawerStatus");
+  if (!drawer) return;
+  setRecordDrawerStatus("Loading all fields…");
+  drawer.classList.remove("hidden");
+  drawer.setAttribute("aria-hidden", "false");
+  $("#recordDrawerTitle").textContent = "Show all data";
+  $("#recordDrawerSub").textContent = `${sobject} · ${id}${tooling ? " · Tooling" : ""}`;
+  $("#recordFieldFilter").value = "";
+  $("#recordFieldList").replaceChildren();
+
+  await ensureSalesforceSiteAccess();
+  const tabUrl = await requireTabUrl();
+  const [describeRes, recordRes] = await Promise.all([
+    send("describeSObject", { tabUrl, sobject, apiVersion: apiVersion(), tooling }),
+    send("getSObject", { tabUrl, sobject, id, apiVersion: apiVersion(), tooling })
+  ]);
+  if (!describeRes.ok) throw new Error(describeRes.error);
+  if (!recordRes.ok) throw new Error(recordRes.error);
+
+  const fields = buildRecordEditorFields(describeRes.result, recordRes.result);
+  state.recordEditor = {
+    open: true,
+    key,
+    sobject,
+    id,
+    tooling: !!tooling,
+    fields,
+    record: recordRes.result,
+    deletable: describeRes.result?.deletable !== false,
+    updateable: describeRes.result?.updateable !== false
+  };
+  $("#recordSave").disabled = !state.recordEditor.updateable;
+  $("#recordDelete").disabled = !state.recordEditor.deletable;
+  renderRecordFieldList();
+  setRecordDrawerStatus(
+    `${fields.length} fields · ${fields.filter((f) => f.updateable).length} editable. Change values then Save, or Delete.`
+  );
+}
+
+function closeRecordDrawer() {
+  const drawer = $("#recordDrawer");
+  if (drawer) {
+    drawer.classList.add("hidden");
+    drawer.setAttribute("aria-hidden", "true");
+  }
+  state.recordEditor.open = false;
+}
+
+function setRecordDrawerStatus(msg) {
+  const el = $("#recordDrawerStatus");
+  if (el) el.textContent = msg || "";
+}
+
+function renderRecordFieldList() {
+  const root = $("#recordFieldList");
+  if (!root) return;
+  const filter = ($("#recordFieldFilter")?.value || "").trim().toLowerCase();
+  const fields = (state.recordEditor.fields || []).filter((f) => {
+    if (!filter) return true;
+    return `${f.name} ${f.label} ${f.type}`.toLowerCase().includes(filter);
+  });
+  root.replaceChildren();
+  for (const f of fields) {
+    const row = document.createElement("div");
+    row.className = `record-field${f.updateable ? "" : " readonly"}`;
+    const lab = document.createElement("label");
+    lab.htmlFor = `rf_${f.name}`;
+    lab.innerHTML = `<strong>${escapeHtml(f.name)}</strong>${escapeHtml(f.label)} · ${escapeHtml(f.type)}`;
+    row.appendChild(lab);
+
+    if (!f.updateable) {
+      const ro = document.createElement("div");
+      ro.className = "field-ro";
+      ro.textContent = f.value === "" || f.value == null ? "—" : String(f.value);
+      row.appendChild(ro);
+    } else if (f.type === "boolean") {
+      const sel = document.createElement("select");
+      sel.id = `rf_${f.name}`;
+      sel.dataset.field = f.name;
+      sel.innerHTML = `<option value="false">false</option><option value="true">true</option>`;
+      const cur = f.value === true || f.value === "true" || f.value === "TRUE";
+      sel.value = cur ? "true" : "false";
+      row.appendChild(sel);
+    } else if (f.picklistValues?.length && (f.type === "picklist" || f.type === "combobox")) {
+      const sel = document.createElement("select");
+      sel.id = `rf_${f.name}`;
+      sel.dataset.field = f.name;
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = f.nillable ? "(blank)" : "";
+      sel.appendChild(empty);
+      for (const p of f.picklistValues) {
+        const opt = document.createElement("option");
+        opt.value = p.value;
+        opt.textContent = p.label;
+        sel.appendChild(opt);
+      }
+      sel.value = f.value == null ? "" : String(f.value);
+      row.appendChild(sel);
+    } else if (f.type === "textarea" || f.type === "encryptedstring" || (f.length && f.length > 80)) {
+      const ta = document.createElement("textarea");
+      ta.id = `rf_${f.name}`;
+      ta.dataset.field = f.name;
+      ta.value = f.value == null ? "" : String(f.value);
+      row.appendChild(ta);
+    } else {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.id = `rf_${f.name}`;
+      input.dataset.field = f.name;
+      input.value = f.value == null ? "" : String(f.value);
+      row.appendChild(input);
+    }
+    root.appendChild(row);
+  }
+  if (!fields.length) {
+    const empty = document.createElement("div");
+    empty.className = "query-empty";
+    empty.textContent = "No fields match this filter.";
+    root.appendChild(empty);
+  }
+}
+
+async function saveRecordDrawer() {
+  const ed = state.recordEditor;
+  if (!ed?.sobject || !ed?.id) return;
+  if (!ed.updateable) throw new Error("This object is not updateable.");
+  const { body, changed } = buildUpdatePayload(ed.fields, (name) => {
+    const el = document.querySelector(`[data-field="${CSS.escape(name)}"]`);
+    if (!el) return "";
+    return el.value;
+  });
+  if (!changed) {
+    setRecordDrawerStatus("No changes to save.");
+    return;
+  }
+  setRecordDrawerStatus(`Saving ${changed} field${changed === 1 ? "" : "s"}…`);
+  const res = await send("updateSObject", {
+    tabUrl: await requireTabUrl(),
+    sobject: ed.sobject,
+    id: ed.id,
+    fields: body,
+    apiVersion: apiVersion(),
+    tooling: ed.tooling
+  });
+  if (!res.ok) throw new Error(res.error);
+  setRecordDrawerStatus(`Saved: ${res.result.fields.join(", ")}. Reloading…`);
+  await openRecordDrawer({
+    key: ed.key,
+    sobject: ed.sobject,
+    id: ed.id,
+    tooling: ed.tooling
+  });
+  setRecordDrawerStatus(`Saved: ${Object.keys(body).join(", ")}.`);
+}
+
+async function deleteRecordDrawer() {
+  const ed = state.recordEditor;
+  if (!ed?.sobject || !ed?.id) return;
+  if (!ed.deletable) throw new Error("This object is not deletable.");
+  const ok = confirm(`Delete ${ed.sobject} ${ed.id}? This cannot be undone from OrgKit.`);
+  if (!ok) return;
+  setRecordDrawerStatus("Deleting…");
+  const res = await send("deleteSObject", {
+    tabUrl: await requireTabUrl(),
+    sobject: ed.sobject,
+    id: ed.id,
+    apiVersion: apiVersion(),
+    tooling: ed.tooling
+  });
+  if (!res.ok) throw new Error(res.error);
+  closeRecordDrawer();
+  const status =
+    ed.key === "nl" ? $("#nlQueryStatus") : $("#soqlQueryStatus");
+  if (status) status.textContent = `Deleted ${ed.sobject} ${ed.id}. Re-run the query to refresh rows.`;
 }
 
 function fillApiVersions() {
@@ -753,7 +1061,7 @@ async function onRunGenSoql() {
       apiVersion: apiVersion()
     });
     if (!res.ok) throw new Error(res.error);
-    renderQueryResult(panel, status, "nl", res.result);
+    renderQueryResult(panel, status, "nl", res.result, state.lastGenSoql);
   } catch (e) {
     clearQueryResult(panel, status, "nl", e.message);
   }
@@ -1604,7 +1912,7 @@ async function runSoqlManual() {
       apiVersion: apiVersion()
     });
     if (!res.ok) throw new Error(res.error);
-    renderQueryResult(panel, status, "soql", res.result);
+    renderQueryResult(panel, status, "soql", res.result, $("#soqlInput").value);
   } catch (e) {
     clearQueryResult(panel, status, "soql", e.message);
   }

@@ -335,6 +335,10 @@ function ruleBasedSoql(text, sobjects = [], resolved = null) {
       );
     } else if (resolvedObj.via === "api-name") {
       notes.push(`Used API name ${objectName} from your prompt.`);
+    } else if (resolvedObj.via === "guessed-api") {
+      notes.push(
+        `Guessed custom object ${objectName} from your wording. If wrong, use the exact API name or keep a Salesforce tab open so OrgKit can match labels.`
+      );
     }
   } else {
     objectName = "Account";

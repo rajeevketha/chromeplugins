@@ -42,6 +42,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     describeGlobal: () => describeGlobal(message.tabUrl, message.apiVersion, message.tooling),
     describeSObject: () =>
       describeSObject(message.tabUrl, message.sobject, message.apiVersion, message.tooling),
+    getSObject: () =>
+      getSObject(message.tabUrl, message.sobject, message.id, message.apiVersion, message.tooling),
+    updateSObject: () =>
+      updateSObject(
+        message.tabUrl,
+        message.sobject,
+        message.id,
+        message.fields,
+        message.apiVersion,
+        message.tooling
+      ),
+    deleteSObject: () =>
+      deleteSObject(message.tabUrl, message.sobject, message.id, message.apiVersion, message.tooling),
     listFlows: () => listFlows(message.tabUrl, message.apiVersion),
     getApexCoverage: () => getApexCoverage(message.tabUrl, message.apiVersion),
     getRecentDeployFailures: () => getRecentDeployFailures(message.tabUrl, message.apiVersion),
@@ -63,11 +76,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
     fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.5.4",
+      version: "1.5.5",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       hasExecuteAnonymous: typeof executeAnonymous === "function",
       hasOrgLimits: typeof getOrgLimits === "function",
+      hasRecordCrud: typeof updateSObject === "function",
       metadataTypeCount: METADATA_SEARCH_TYPES.length,
       packageTypeCount: PACKAGE_TYPES.length
     })
@@ -133,22 +147,28 @@ async function sfFetchUrl(url, sid, options = {}) {
 
 async function sfFetchUrlDirect(url, sid, options = {}) {
   const method = options.method || "GET";
+  const headers = {
+    Authorization: `Bearer ${sid}`,
+    Accept: "application/json",
+    ...(options.headers || {})
+  };
+  if (options.body != null && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
   let res;
   try {
     res = await fetch(url, {
       method,
-      headers: {
-        Authorization: `Bearer ${sid}`,
-        Accept: "application/json"
-      },
+      headers,
+      body: options.body != null ? (typeof options.body === "string" ? options.body : JSON.stringify(options.body)) : undefined,
       credentials: "omit"
     });
   } catch (e) {
     throw new Error(networkBlockedMessage(url, e));
   }
 
-  if (method === "DELETE" && (res.status === 204 || res.status === 200)) {
-    return { ok: true };
+  if ((method === "DELETE" || method === "PATCH" || method === "PUT") && (res.status === 204 || res.status === 200)) {
+    if (res.status === 204) return { ok: true };
   }
 
   const text = await res.text();
@@ -164,7 +184,7 @@ async function sfFetchUrlDirect(url, sid, options = {}) {
       (Array.isArray(body) && body[0]?.message) || body?.message || `HTTP ${res.status}`;
     throw new Error(msg);
   }
-  return body;
+  return body == null ? { ok: true } : body;
 }
 
 async function sfFetchViaSalesforceTab(url, sid, options = {}) {
@@ -173,19 +193,24 @@ async function sfFetchViaSalesforceTab(url, sid, options = {}) {
     throw new Error("No Salesforce tab available for API fallback.");
   }
   const method = options.method || "GET";
+  const requestBody =
+    options.body == null ? null : typeof options.body === "string" ? options.body : JSON.stringify(options.body);
   // Pass token only into the extension isolated world; never log it.
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     world: "ISOLATED",
-    args: [url, sid, method],
-    func: async (fetchUrl, token, httpMethod) => {
+    args: [url, sid, method, requestBody],
+    func: async (fetchUrl, token, httpMethod, bodyText) => {
       try {
+        const headers = {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json"
+        };
+        if (bodyText != null) headers["Content-Type"] = "application/json";
         const res = await fetch(fetchUrl, {
           method: httpMethod,
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json"
-          },
+          headers,
+          body: bodyText == null ? undefined : bodyText,
           credentials: "omit"
         });
         const text = await res.text();
@@ -198,8 +223,11 @@ async function sfFetchViaSalesforceTab(url, sid, options = {}) {
 
   if (!result) throw new Error("Empty response from Salesforce tab fetch.");
   if (result.error) throw new Error(result.error);
-  if (method === "DELETE" && (result.status === 204 || result.status === 200)) {
-    return { ok: true };
+  if (
+    (method === "DELETE" || method === "PATCH" || method === "PUT") &&
+    (result.status === 204 || result.status === 200)
+  ) {
+    if (result.status === 204) return { ok: true };
   }
 
   let body;
@@ -213,7 +241,7 @@ async function sfFetchViaSalesforceTab(url, sid, options = {}) {
       (Array.isArray(body) && body[0]?.message) || body?.message || `HTTP ${result.status}`;
     throw new Error(msg);
   }
-  return body;
+  return body == null ? { ok: true } : body;
 }
 
 async function sfFetchText(url, sid) {
@@ -399,6 +427,66 @@ async function describeSObject(tabUrl, sobject, apiVersion = DEFAULT_API_VERSION
     ? `/tooling/sobjects/${sobject}/describe`
     : `/sobjects/${sobject}/describe`;
   return restGet(tabUrl, path, apiVersion);
+}
+
+function assertRecordId(id) {
+  const clean = String(id || "").trim();
+  if (!/^[a-zA-Z0-9]{15,18}$/.test(clean)) throw new Error("Invalid Salesforce record Id.");
+  return clean;
+}
+
+function assertSObjectName(sobject) {
+  const name = String(sobject || "").trim();
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) throw new Error("Invalid object API name");
+  return name;
+}
+
+async function getSObject(tabUrl, sobject, id, apiVersion = DEFAULT_API_VERSION, tooling = false) {
+  const type = assertSObjectName(sobject);
+  const recordId = assertRecordId(id);
+  const prefix = tooling ? "/tooling" : "";
+  return restGet(tabUrl, `${prefix}/sobjects/${type}/${recordId}`, apiVersion);
+}
+
+async function updateSObject(
+  tabUrl,
+  sobject,
+  id,
+  fields,
+  apiVersion = DEFAULT_API_VERSION,
+  tooling = false
+) {
+  const type = assertSObjectName(sobject);
+  const recordId = assertRecordId(id);
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
+    throw new Error("Update fields object required.");
+  }
+  // Security: never allow Id / attributes in PATCH body; only simple field map.
+  const body = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(key)) continue;
+    if (key === "Id" || key === "attributes") continue;
+    body[key] = value;
+  }
+  if (!Object.keys(body).length) throw new Error("No updatable fields provided.");
+
+  const { session } = await requireSession(tabUrl);
+  await ensureHostFetchAllowed(session.apiBase);
+  const prefix = tooling ? "/tooling" : "";
+  const url = restUrl(session.apiBase, `${prefix}/sobjects/${type}/${recordId}`, apiVersion);
+  await sfFetchUrl(url, session.sid, { method: "PATCH", body });
+  return { ok: true, id: recordId, sobject: type, fields: Object.keys(body) };
+}
+
+async function deleteSObject(tabUrl, sobject, id, apiVersion = DEFAULT_API_VERSION, tooling = false) {
+  const type = assertSObjectName(sobject);
+  const recordId = assertRecordId(id);
+  const { session } = await requireSession(tabUrl);
+  await ensureHostFetchAllowed(session.apiBase);
+  const prefix = tooling ? "/tooling" : "";
+  const url = restUrl(session.apiBase, `${prefix}/sobjects/${type}/${recordId}`, apiVersion);
+  await sfFetchUrl(url, session.sid, { method: "DELETE" });
+  return { ok: true, id: recordId, sobject: type };
 }
 
 async function listFlows(tabUrl, apiVersion = DEFAULT_API_VERSION) {

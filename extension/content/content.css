@@ -22,6 +22,10 @@
   background: #dd7a01;
 }
 
+.sfdev-badge.deved {
+  background: #0176d3;
+}
+
 .sfdev-toolbar {
   position: fixed;
   right: 12px;

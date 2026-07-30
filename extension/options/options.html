@@ -12,7 +12,7 @@
       <img src="../icons/icon48.png" alt="" width="36" height="36" />
       <div>
         <h1>SF Dev Toolkit</h1>
-        <p>Settings for your Salesforce day-to-day helper.</p>
+        <p>Settings for Salesforce developer assistants.</p>
       </div>
     </header>
 
@@ -29,9 +29,29 @@
     </section>
 
     <section class="card">
-      <h2>API</h2>
+      <h2>Salesforce API</h2>
       <label for="apiVersion">Default API version</label>
       <select id="apiVersion"></select>
+    </section>
+
+    <section class="card">
+      <h2>Optional AI (OpenAI-compatible)</h2>
+      <p class="muted">
+        Used to enhance NL→SOQL, Formula Builder, Error Decoder, and Apex Review.
+        Offline rule engines always work without AI.
+        <strong>Never sends your Salesforce session ID</strong> — only the text you paste into those tools.
+      </p>
+      <label class="check">
+        <input type="checkbox" id="aiEnabled" />
+        Enable AI assist
+      </label>
+      <label for="aiApiKey">API key</label>
+      <input type="password" id="aiApiKey" class="text" placeholder="sk-…" autocomplete="off" />
+      <label for="aiBaseUrl">Base URL</label>
+      <input type="url" id="aiBaseUrl" class="text" placeholder="https://api.openai.com/v1" />
+      <label for="aiModel">Model</label>
+      <input type="text" id="aiModel" class="text" placeholder="gpt-4o-mini" />
+      <p class="muted">Stored in local extension storage (not sync). Grant host access when prompted.</p>
     </section>
 
     <section class="card">

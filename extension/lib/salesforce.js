@@ -19,6 +19,7 @@ export function parseOrgFromUrl(url) {
     const match = host.match(SF_HOST_RE);
     const isLightning = host.includes("lightning.force.com") || u.pathname.startsWith("/lightning");
     const isSetup = host.includes("salesforce-setup.com") || u.pathname.includes("/lightning/setup/");
+    const isDevEd = host.includes("-dev-ed.") || host.includes("develop.my.salesforce.com");
     const isSandbox =
       host.includes(".sandbox.") ||
       host.includes("--") ||
@@ -36,6 +37,7 @@ export function parseOrgFromUrl(url) {
     }
 
     const myDomain = host.split(".")[0].replace(/--.*$/, "");
+    const envLabel = isSandbox ? "Sandbox" : isDevEd ? "Developer" : "Production";
 
     return {
       hostname: host,
@@ -47,7 +49,8 @@ export function parseOrgFromUrl(url) {
       isLightning,
       isSetup,
       isSandbox,
-      envLabel: isSandbox ? "Sandbox" : "Production",
+      isDevEd,
+      envLabel,
       url: u.href
     };
   } catch {

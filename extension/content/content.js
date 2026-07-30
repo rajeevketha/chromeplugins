@@ -57,10 +57,12 @@
       host.includes("--") ||
       host.startsWith("cs") ||
       host.includes("scratch");
+    const isDevEd = host.includes("-dev-ed.") || host.includes("develop.my.salesforce.com");
     return {
       host,
       isSandbox,
-      label: isSandbox ? "Sandbox" : "Prod"
+      isDevEd,
+      label: isSandbox ? "Sandbox" : isDevEd ? "Dev Ed" : "Prod"
     };
   }
 
@@ -69,7 +71,7 @@
     const env = envInfo();
     const el = document.createElement("div");
     el.id = "sfdev-org-badge";
-    el.className = `sfdev-badge ${env.isSandbox ? "sandbox" : "prod"}`;
+    el.className = `sfdev-badge ${env.isSandbox ? "sandbox" : env.isDevEd ? "deved" : "prod"}`;
     el.title = env.host;
     el.textContent = env.label;
     document.documentElement.appendChild(el);

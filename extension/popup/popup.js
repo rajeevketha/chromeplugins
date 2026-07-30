@@ -1,19 +1,85 @@
 import { QUICK_LINKS, decodeKeyPrefix } from "../lib/quick-links.js";
 import {
   isSalesforceUrl,
-  parseOrgFromUrl,
   normalizeSfId,
   to18,
   buildRecordUrl,
   DEFAULT_API_VERSION
 } from "../lib/salesforce.js";
+import { generateSoql } from "../lib/nl-soql.js";
+import { analyzeFlow } from "../lib/flow-analyzer.js";
+import { predictGovernorLimits } from "../lib/governor.js";
+import { decodeError, decodeErrorWithAi } from "../lib/error-decoder.js";
+import { analyzeDebugLog } from "../lib/debug-log.js";
+import { buildFormula, FORMULA_HELPERS } from "../lib/formula-builder.js";
+import { DEPLOY_CHECKLIST, assessDeploymentReadiness } from "../lib/deployment.js";
+import { analyzePermissions, buildPermissionQueries } from "../lib/permissions.js";
+import { reviewApex } from "../lib/apex-review.js";
+import { aiComplete } from "../lib/ai.js";
+import {
+  summarizeField,
+  filterFields,
+  findDependentPairs,
+  buildDependentMap
+} from "../lib/describe-browser.js";
+import { METADATA_SEARCH_TYPES, lightningBaseFromOrg } from "../lib/metadata-open.js";
+import { PACKAGE_TYPES, buildPackageXml, packageVersion } from "../lib/package-xml.js";
+import { buildFieldReferenceHint } from "../lib/flow-cleaner.js";
+
+const FEATURES = [
+  { id: "describe", title: "Describe Browser", blurb: "Fields, picklists, dependencies" },
+  { id: "meta-open", title: "Metadata Quick Open", blurb: "Jump to class, flow, LWC…" },
+  { id: "package", title: "Package.xml Builder", blurb: "Multi-select → package.xml" },
+  { id: "flow-clean", title: "Inactive Flow Cleaner", blurb: "Delete versions blocking fields" },
+  { id: "nl-soql", title: "NL → SOQL", blurb: "Natural language to SOQL" },
+  { id: "flow", title: "Flow Analyzer", blurb: "Spot DML-in-loop & fault gaps" },
+  { id: "governor", title: "Governor Predictor", blurb: "Estimate limit risk in Apex" },
+  { id: "errors", title: "Error Decoder", blurb: "Explain Salesforce exceptions" },
+  { id: "logs", title: "Debug Log Analyzer", blurb: "Limits, SOQL, exceptions" },
+  { id: "formula", title: "Formula Builder", blurb: "AI / template formulas" },
+  { id: "deploy", title: "Deploy Readiness", blurb: "Checklist + org signals" },
+  { id: "perms", title: "Permission Investigator", blurb: "User CRUD / FLS view" },
+  { id: "apex", title: "Apex Review", blurb: "Security & bulkification scan" }
+];
+
+const TITLES = {
+  home: "SF Dev Toolkit",
+  describe: "Describe Browser",
+  "meta-open": "Metadata Quick Open",
+  package: "Package.xml Builder",
+  "flow-clean": "Inactive Flow Cleaner",
+  "nl-soql": "NL → SOQL",
+  flow: "Flow Analyzer",
+  governor: "Governor Predictor",
+  errors: "Error Decoder",
+  logs: "Debug Log Analyzer",
+  formula: "Formula Builder",
+  deploy: "Deploy Readiness",
+  perms: "Permission Investigator",
+  apex: "Apex Review",
+  links: "Setup Links",
+  "soql-run": "SOQL Runner",
+  ids: "ID Tools",
+  favs: "Favorites"
+};
 
 const state = {
   tab: null,
   org: null,
   session: null,
   favorites: [],
-  lastSoqlJson: ""
+  lastSoqlJson: "",
+  lastGenSoql: "",
+  lastFormula: "",
+  deployChecked: [],
+  deploySignals: {},
+  describe: null,
+  describeFields: [],
+  packageSelections: [],
+  packageMembersCache: [],
+  lastPackageXml: "",
+  inactiveFlows: [],
+  inactiveFlowSelected: []
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -21,39 +87,130 @@ const $ = (sel) => document.querySelector(sel);
 init();
 
 async function init() {
-  bindTabs();
-  bindActions();
+  renderFeatureGrid();
+  bindNav();
+  bindFeatureActions();
+  bindUtilityActions();
   fillApiVersions();
+  fillMetaTypeSelect();
+  fillPackageTypeSelect();
   renderLinks();
-  await loadSettings();
+  renderFormulaHelpers();
   await loadFavorites();
+  await loadDeployChecklist();
   await refreshOrg();
+  showView("home");
 }
 
-async function loadSettings() {
-  const data = await chrome.storage.sync.get({ apiVersion: DEFAULT_API_VERSION });
-  if (data.apiVersion) $("#apiVersion").value = data.apiVersion;
-}
-
-function bindTabs() {
-  document.querySelectorAll(".tab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-      document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
-      tab.classList.add("active");
-      $(`#panel-${tab.dataset.tab}`).classList.add("active");
-    });
+function renderFeatureGrid() {
+  const grid = $("#featureGrid");
+  grid.innerHTML = "";
+  FEATURES.forEach((f) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "feature-card";
+    btn.innerHTML = `<strong>${f.title}</strong><span>${f.blurb}</span>`;
+    btn.addEventListener("click", () => showView(f.id));
+    grid.appendChild(btn);
   });
 }
 
-function bindActions() {
+function bindNav() {
   $("#openOptions").addEventListener("click", () => chrome.runtime.openOptionsPage());
+  $("#backBtn").addEventListener("click", () => showView("home"));
+  document.querySelectorAll("[data-open]").forEach((btn) => {
+    btn.addEventListener("click", () => showView(btn.getAttribute("data-open")));
+  });
+}
+
+function showView(id) {
+  document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+  const el = $(`#view-${id}`);
+  if (el) el.classList.add("active");
+  $("#headerTitle").textContent = TITLES[id] || "SF Dev Toolkit";
+  $("#backBtn").classList.toggle("hidden", id === "home");
+  if (id === "describe" && !state.globalObjects) {
+    preloadGlobalObjects().catch(() => {});
+  }
+}
+
+function bindFeatureActions() {
+  $("#genSoql").addEventListener("click", onGenSoql);
+  $("#runGenSoql").addEventListener("click", onRunGenSoql);
+  $("#copyGenSoql").addEventListener("click", async () => {
+    if (state.lastGenSoql) await navigator.clipboard.writeText(state.lastGenSoql);
+  });
+
+  $("#loadFlows").addEventListener("click", onLoadFlows);
+  $("#analyzeFlowPaste").addEventListener("click", () => {
+    renderFlowReport(analyzeFlow($("#flowPaste").value));
+  });
+
+  $("#runGovernor").addEventListener("click", () => {
+    renderGovernor(predictGovernorLimits($("#govInput").value));
+  });
+
+  $("#decodeErr").addEventListener("click", () => renderError(decodeError($("#errInput").value)));
+  $("#decodeErrAi").addEventListener("click", async () => {
+    const out = await decodeErrorWithAi($("#errInput").value, aiComplete);
+    renderError(out);
+  });
+
+  $("#analyzeLog").addEventListener("click", () => renderLog(analyzeDebugLog($("#logInput").value)));
+
+  $("#buildFormula").addEventListener("click", onBuildFormula);
+  $("#copyFormula").addEventListener("click", async () => {
+    if (state.lastFormula) await navigator.clipboard.writeText(state.lastFormula);
+  });
+
+  $("#refreshDeploySignals").addEventListener("click", refreshDeploySignals);
+  $("#assessDeploy").addEventListener("click", assessDeploy);
+
+  $("#investigatePerms").addEventListener("click", onInvestigatePerms);
+  $("#reviewApex").addEventListener("click", onReviewApex);
+
+  $("#loadDescribe").addEventListener("click", onLoadDescribe);
+  $("#describeFieldFilter").addEventListener("input", () => renderDescribeFields());
+  $("#describeObjectSearch").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") onLoadDescribe();
+  });
+
+  $("#searchMeta").addEventListener("click", onSearchMeta);
+  $("#metaQuery").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") onSearchMeta();
+  });
+
+  $("#loadPackageMembers").addEventListener("click", onLoadPackageMembers);
+  $("#packageMemberFilter").addEventListener("input", () => renderPackageMembers());
+  $("#clearPackageSel").addEventListener("click", () => {
+    state.packageSelections = [];
+    renderPackageSelection();
+    renderPackageMembers();
+  });
+  $("#genPackageXml").addEventListener("click", onGenPackageXml);
+  $("#copyPackageXml").addEventListener("click", async () => {
+    if (state.lastPackageXml) await navigator.clipboard.writeText(state.lastPackageXml);
+  });
+
+  $("#loadInactiveFlows").addEventListener("click", () => onLoadInactiveFlows(false));
+  $("#scanFlowFieldRefs").addEventListener("click", () => onLoadInactiveFlows(true));
+  $("#flowCleanFilter").addEventListener("input", () => renderInactiveFlows());
+  $("#selectAllInactiveFlows").addEventListener("click", () => {
+    state.inactiveFlowSelected = state.inactiveFlows.filter((f) => f.canDelete).map((f) => f.id);
+    renderInactiveFlows();
+  });
+  $("#clearInactiveFlows").addEventListener("click", () => {
+    state.inactiveFlowSelected = [];
+    renderInactiveFlows();
+  });
+  $("#deleteInactiveFlows").addEventListener("click", onDeleteInactiveFlows);
+}
+
+function bindUtilityActions() {
   $("#linkSearch").addEventListener("input", () => renderLinks($("#linkSearch").value));
-  $("#runSoql").addEventListener("click", runSoql);
+  $("#runSoql").addEventListener("click", runSoqlManual);
   $("#copySoqlResult").addEventListener("click", async () => {
-    if (!state.lastSoqlJson) return;
-    await navigator.clipboard.writeText(state.lastSoqlJson);
-    toastResult("Copied.");
+    if (state.lastSoqlJson) await navigator.clipboard.writeText(state.lastSoqlJson);
   });
   $("#idInput").addEventListener("input", updateIdInfo);
   $("#openRecord").addEventListener("click", openRecord);
@@ -62,7 +219,7 @@ function bindActions() {
   $("#scanPageIds").addEventListener("click", scanPageIds);
   $("#addFav").addEventListener("click", addFavorite);
   $("#saveCurrent").addEventListener("click", saveCurrentPage);
-  $("#openDevConsole").addEventListener("click", openDevConsole);
+  updateIdInfo();
 }
 
 function fillApiVersions() {
@@ -74,6 +231,9 @@ function fillApiVersions() {
     if (`${v}.0` === DEFAULT_API_VERSION) opt.selected = true;
     select.appendChild(opt);
   }
+  chrome.storage.sync.get({ apiVersion: DEFAULT_API_VERSION }, (data) => {
+    if (data.apiVersion) select.value = data.apiVersion;
+  });
 }
 
 async function refreshOrg() {
@@ -93,19 +253,17 @@ function setOrgBanner(org, session) {
   const pill = $("#envPill");
   const host = $("#orgHost");
   const meta = $("#orgMeta");
-
   if (!org) {
     banner.classList.add("muted");
     pill.textContent = "—";
     pill.className = "pill";
     host.textContent = "Open a Salesforce tab";
-    meta.textContent = "Quick links and SOQL need an active Salesforce session.";
+    meta.textContent = "Org-connected tools need an active Salesforce session.";
     return;
   }
-
   banner.classList.remove("muted");
   pill.textContent = org.envLabel;
-  pill.className = `pill ${org.isSandbox ? "sandbox" : "prod"}`;
+  pill.className = `pill ${org.isSandbox ? "sandbox" : org.isDevEd ? "deved" : "prod"}`;
   host.textContent = org.hostname;
   const user =
     session?.userInfo?.preferred_username ||
@@ -119,11 +277,710 @@ function setOrgBanner(org, session) {
     .join(" · ");
 }
 
+function apiVersion() {
+  return $("#apiVersion")?.value || DEFAULT_API_VERSION;
+}
+
+function requireTabUrl() {
+  if (!state.tab?.url || !isSalesforceUrl(state.tab.url)) {
+    throw new Error("Open a logged-in Salesforce tab first.");
+  }
+  return state.tab.url;
+}
+
+/* —— Features —— */
+
+async function onGenSoql() {
+  const out = $("#nlSoqlOut");
+  out.textContent = "Generating…";
+  try {
+    const result = await generateSoql($("#nlInput").value);
+    state.lastGenSoql = result.soql;
+    out.textContent = `${result.soql}\n\n// source: ${result.source}\n${result.notes.map((n) => `// ${n}`).join("\n")}`;
+  } catch (e) {
+    out.textContent = e.message;
+  }
+}
+
+async function onRunGenSoql() {
+  const box = $("#nlSoqlRunOut");
+  if (!state.lastGenSoql) {
+    box.textContent = "Generate a query first.";
+    return;
+  }
+  box.textContent = "Running…";
+  try {
+    const res = await send("runSoql", {
+      tabUrl: requireTabUrl(),
+      query: state.lastGenSoql,
+      apiVersion: apiVersion()
+    });
+    if (!res.ok) throw new Error(res.error);
+    box.textContent = JSON.stringify(res.result, null, 2);
+  } catch (e) {
+    box.textContent = e.message;
+  }
+}
+
+async function onLoadFlows() {
+  $("#flowOut").innerHTML = `<div class="summary-bar">Loading flows…</div>`;
+  try {
+    const res = await send("listFlows", { tabUrl: requireTabUrl(), apiVersion: apiVersion() });
+    if (!res.ok) throw new Error(res.error);
+    const report = analyzeFlow(res.result);
+    renderFlowReport(report);
+  } catch (e) {
+    $("#flowOut").innerHTML = `<div class="finding high"><span class="tag">error</span><strong>${escapeHtml(e.message)}</strong></div>`;
+  }
+}
+
+function renderFlowReport(report) {
+  $("#flowOut").innerHTML =
+    `<div class="summary-bar">${escapeHtml(report.summary)}</div>` +
+    report.findings
+      .map(
+        (f) => `<div class="finding ${f.severity}">
+      <span class="tag">${f.severity}</span>
+      <strong>${escapeHtml(f.rule)} · ${escapeHtml(f.flow)}</strong>
+      <p>${escapeHtml(f.detail)}</p>
+    </div>`
+      )
+      .join("");
+}
+
+function renderGovernor(report) {
+  const meters = report.estimates
+    .map(
+      (e) => `<div class="finding ${e.risk}">
+      <div class="meter ${e.risk}"><span>${escapeHtml(e.name)}</span>
+      <div class="bar"><i style="width:${e.pct}%"></i></div>
+      <span>${e.used}/${e.max}</span></div>
+    </div>`
+    )
+    .join("");
+  const risks = report.risks
+    .map((r) => `<div class="finding ${r.level}"><span class="tag">${r.level}</span><p>${escapeHtml(r.msg)}</p></div>`)
+    .join("");
+  const advice = `<div class="finding info"><strong>Advice</strong><ul>${report.advice
+    .map((a) => `<li>${escapeHtml(a)}</li>`)
+    .join("")}</ul></div>`;
+  $("#govOut").innerHTML = `<div class="summary-bar">${escapeHtml(report.summary)}</div>${meters}${risks}${advice}`;
+}
+
+function renderError(report) {
+  const matches = (report.matches || [])
+    .map(
+      (m) => `<div class="finding high">
+      <span class="tag">${escapeHtml(m.id)}</span>
+      <strong>${escapeHtml(m.title)}</strong>
+      <p>${escapeHtml(m.meaning)}</p>
+      <ul>${m.fixes.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>
+    </div>`
+    )
+    .join("");
+  const tips = (report.tips || []).map((t) => `<li>${escapeHtml(t)}</li>`).join("");
+  const ai = report.ai
+    ? `<div class="finding info"><strong>AI assist</strong><p>${escapeHtml(report.ai)}</p></div>`
+    : report.aiError
+      ? `<div class="finding medium"><strong>AI</strong><p>${escapeHtml(report.aiError)}</p></div>`
+      : "";
+  $("#errOut").innerHTML = `<div class="summary-bar">${escapeHtml(report.summary)}</div>${matches}${
+    tips ? `<div class="finding info"><ul>${tips}</ul></div>` : ""
+  }${ai}`;
+}
+
+function renderLog(report) {
+  const limits = report.limits
+    .map(
+      (l) => `<div class="finding ${l.risk}">
+      <div class="meter ${l.risk}"><span>${escapeHtml(l.key)}</span>
+      <div class="bar"><i style="width:${l.pct}%"></i></div>
+      <span>${l.used}/${l.max}</span></div>
+    </div>`
+    )
+    .join("");
+  const ex = report.exceptions.length
+    ? `<div class="finding high"><strong>Exceptions</strong><ul>${report.exceptions
+        .map((e) => `<li><code>${escapeHtml(e)}</code></li>`)
+        .join("")}</ul></div>`
+    : "";
+  const soql = report.soql.length
+    ? `<div class="finding info"><strong>SOQL</strong><ul>${report.soql
+        .map((s) => `<li><code>${escapeHtml(s)}</code></li>`)
+        .join("")}</ul></div>`
+    : "";
+  const warnings = report.warnings.length
+    ? `<div class="finding medium"><strong>Warnings</strong><ul>${report.warnings
+        .map((w) => `<li>${escapeHtml(w)}</li>`)
+        .join("")}</ul></div>`
+    : "";
+  $("#logOut").innerHTML = `<div class="summary-bar">${escapeHtml(report.summary)}</div>${limits}${ex}${soql}${warnings}`;
+}
+
+async function onBuildFormula() {
+  const out = $("#formulaOut");
+  out.textContent = "Building…";
+  try {
+    const result = await buildFormula($("#formulaInput").value);
+    state.lastFormula = result.formula;
+    out.textContent = `${result.formula}\n\n// source: ${result.source}\n${result.notes.map((n) => `// ${n}`).join("\n")}`;
+  } catch (e) {
+    out.textContent = e.message;
+  }
+}
+
+function renderFormulaHelpers() {
+  $("#formulaHelpers").innerHTML = FORMULA_HELPERS.map(
+    (h) => `<div><code>${escapeHtml(h.fn)}</code> — ${escapeHtml(h.desc)}</div>`
+  ).join("");
+}
+
+async function loadDeployChecklist() {
+  const data = await chrome.storage.sync.get({ deployChecklist: [] });
+  state.deployChecked = data.deployChecklist || [];
+  renderDeployChecklist();
+}
+
+function renderDeployChecklist() {
+  const root = $("#deployChecklist");
+  root.innerHTML = DEPLOY_CHECKLIST.map((c) => {
+    const checked = state.deployChecked.includes(c.id) ? "checked" : "";
+    return `<label><input type="checkbox" data-check="${c.id}" ${checked} /> <span>${escapeHtml(c.label)} <em style="color:var(--muted)">(${c.severity})</em></span></label>`;
+  }).join("");
+  root.querySelectorAll("input[data-check]").forEach((input) => {
+    input.addEventListener("change", async () => {
+      const id = input.getAttribute("data-check");
+      if (input.checked) state.deployChecked.push(id);
+      else state.deployChecked = state.deployChecked.filter((x) => x !== id);
+      state.deployChecked = [...new Set(state.deployChecked)];
+      await chrome.storage.sync.set({ deployChecklist: state.deployChecked });
+    });
+  });
+}
+
+async function refreshDeploySignals() {
+  $("#deploySignals").textContent = "Checking org…";
+  try {
+    const tabUrl = requireTabUrl();
+    const [cov, fails] = await Promise.all([
+      send("getApexCoverage", { tabUrl, apiVersion: apiVersion() }),
+      send("getRecentDeployFailures", { tabUrl, apiVersion: apiVersion() })
+    ]);
+    state.deploySignals = {
+      coveragePercent: cov.ok ? cov.result.coveragePercent : null,
+      recentDeployFailures: fails.ok ? fails.result.count : 0,
+      isProduction: state.org ? !state.org.isSandbox && !state.org.isDevEd : false,
+      coverageError: cov.ok ? cov.result.error : cov.error
+    };
+    const parts = [];
+    if (state.deploySignals.coveragePercent != null) {
+      parts.push(`Coverage ~${state.deploySignals.coveragePercent}%`);
+    } else {
+      parts.push(`Coverage unavailable${state.deploySignals.coverageError ? `: ${state.deploySignals.coverageError}` : ""}`);
+    }
+    parts.push(`Failed deploys: ${state.deploySignals.recentDeployFailures}`);
+    const envText = state.org?.isSandbox
+      ? "Environment: Sandbox"
+      : state.org?.isDevEd
+        ? "Environment: Developer Edition"
+        : "Environment: Production";
+    parts.push(envText);
+    $("#deploySignals").textContent = parts.join(" · ");
+  } catch (e) {
+    $("#deploySignals").textContent = e.message;
+  }
+}
+
+function assessDeploy() {
+  const report = assessDeploymentReadiness(state.deployChecked, state.deploySignals);
+  const findings = report.findings
+    .map(
+      (f) => `<div class="finding ${f.severity}"><span class="tag">${f.severity}</span><strong>${escapeHtml(f.title)}</strong><p>${escapeHtml(f.detail)}</p></div>`
+    )
+    .join("");
+  $("#deployOut").innerHTML = `<div class="summary-bar">${escapeHtml(report.summary)}</div>${findings}`;
+}
+
+async function onInvestigatePerms() {
+  const userKey = $("#permUser").value.trim();
+  const objectApiName = $("#permObject").value.trim();
+  if (!userKey || !objectApiName) {
+    $("#permOut").innerHTML = `<div class="finding medium"><p>User and object API name are required.</p></div>`;
+    return;
+  }
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(objectApiName)) {
+    $("#permOut").innerHTML = `<div class="finding high"><p>Invalid object API name.</p></div>`;
+    return;
+  }
+  $("#permOut").innerHTML = `<div class="summary-bar">Investigating…</div>`;
+  try {
+    const tabUrl = requireTabUrl();
+    const qs = buildPermissionQueries(userKey, objectApiName);
+    const userRes = await send("runSoql", { tabUrl, query: qs.user, apiVersion: apiVersion() });
+    if (!userRes.ok) throw new Error(userRes.error);
+    const user = userRes.result.records?.[0];
+    if (!user) throw new Error("User not found");
+
+    const fill = (q) => q.replaceAll("{USER_ID}", user.Id);
+    const [assignRes, objRes, fieldRes, describeRes] = await Promise.all([
+      send("runSoql", { tabUrl, query: fill(qs.assignments), apiVersion: apiVersion() }),
+      send("runSoql", { tabUrl, query: fill(qs.objectPerms), apiVersion: apiVersion() }),
+      send("runSoql", { tabUrl, query: fill(qs.fieldPerms), apiVersion: apiVersion() }),
+      send("describeSObject", { tabUrl, sobject: objectApiName, apiVersion: apiVersion() })
+    ]);
+
+    const report = analyzePermissions({
+      user,
+      objectApiName,
+      objectDescribe: describeRes.ok ? describeRes.result : null,
+      objectPerms: objRes.ok ? objRes.result.records || [] : [],
+      fieldPerms: fieldRes.ok ? fieldRes.result.records || [] : [],
+      assignments: assignRes.ok ? assignRes.result.records || [] : []
+    });
+
+    $("#permOut").innerHTML =
+      `<div class="summary-bar">${escapeHtml(report.summary)}</div>` +
+      report.findings
+        .map(
+          (f) => `<div class="finding ${f.severity}"><span class="tag">${f.severity}</span><strong>${escapeHtml(f.title)}</strong><p>${escapeHtml(f.detail)}</p></div>`
+        )
+        .join("");
+  } catch (e) {
+    $("#permOut").innerHTML = `<div class="finding high"><strong>Error</strong><p>${escapeHtml(e.message)}</p></div>`;
+  }
+}
+
+async function onReviewApex() {
+  $("#apexOut").innerHTML = `<div class="summary-bar">Reviewing…</div>`;
+  try {
+    const report = await reviewApex($("#apexInput").value);
+    const findings = report.findings
+      .map(
+        (f) => `<div class="finding ${f.severity}">
+        <span class="tag">${f.severity}${f.lineHint ? ` · line ${f.lineHint}` : ""}</span>
+        <strong>${escapeHtml(f.rule)}</strong>
+        <p>${escapeHtml(f.detail)}</p>
+      </div>`
+      )
+      .join("");
+    const ai = report.ai
+      ? `<div class="finding info"><strong>AI review</strong><p>${escapeHtml(report.ai)}</p></div>`
+      : "";
+    $("#apexOut").innerHTML = `<div class="summary-bar">${escapeHtml(report.summary)}</div>${findings}${ai}`;
+  } catch (e) {
+    $("#apexOut").innerHTML = `<div class="finding high"><p>${escapeHtml(e.message)}</p></div>`;
+  }
+}
+
+/* —— Describe / Metadata / Package.xml —— */
+
+function fillMetaTypeSelect() {
+  const sel = $("#metaType");
+  sel.innerHTML = `<option value="">All types</option>`;
+  METADATA_SEARCH_TYPES.forEach((t) => {
+    const opt = document.createElement("option");
+    opt.value = t.id;
+    opt.textContent = t.label;
+    sel.appendChild(opt);
+  });
+}
+
+function fillPackageTypeSelect() {
+  const sel = $("#packageType");
+  sel.innerHTML = "";
+  PACKAGE_TYPES.forEach((t) => {
+    const opt = document.createElement("option");
+    opt.value = t.name;
+    opt.textContent = t.label;
+    sel.appendChild(opt);
+  });
+}
+
+async function preloadGlobalObjects() {
+  try {
+    const res = await send("describeGlobal", { tabUrl: requireTabUrl(), apiVersion: apiVersion() });
+    if (!res.ok) return;
+    const names = (res.result.sobjects || []).map((s) => s.name).sort();
+    state.globalObjects = names;
+    $("#describeObjectList").innerHTML = names
+      .slice(0, 500)
+      .map((n) => `<option value="${escapeHtml(n)}"></option>`)
+      .join("");
+  } catch {
+    /* optional */
+  }
+}
+
+async function onLoadDescribe() {
+  const sobject = $("#describeObjectSearch").value.trim();
+  if (!sobject) return;
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(sobject)) {
+    $("#describeSummary").textContent = "Invalid object API name.";
+    return;
+  }
+  $("#describeSummary").textContent = "Loading describe…";
+  $("#describeFields").innerHTML = "";
+  $("#describeDetail").innerHTML = "";
+  $("#describeDependent").innerHTML = "";
+  try {
+    const res = await send("describeSObject", {
+      tabUrl: requireTabUrl(),
+      sobject,
+      apiVersion: apiVersion()
+    });
+    if (!res.ok) throw new Error(res.error);
+    const fields = (res.result.fields || []).map(summarizeField);
+    state.describe = res.result;
+    state.describeFields = fields;
+    $("#describeSummary").textContent = `${res.result.name} · ${fields.length} fields · keyPrefix ${res.result.keyPrefix || "—"}`;
+    renderDescribeFields();
+    renderDependentPicker(fields);
+  } catch (e) {
+    $("#describeSummary").textContent = e.message;
+  }
+}
+
+function renderDescribeFields() {
+  const root = $("#describeFields");
+  if (!state.describeFields?.length) {
+    root.innerHTML = "";
+    return;
+  }
+  const filtered = filterFields(state.describeFields, $("#describeFieldFilter").value);
+  root.innerHTML = filtered
+    .map((f) => {
+      const deps = f.dependentPicklist ? " · dependent" : f.controllerName ? "" : "";
+      const refs = f.referenceTo?.length ? ` → ${f.referenceTo.join(",")}` : "";
+      return `<button type="button" class="describe-item" data-field="${escapeHtml(f.name)}">
+        <strong>${escapeHtml(f.name)}</strong>
+        <span>${escapeHtml(f.label)} · ${escapeHtml(f.type)}${escapeHtml(refs)}${deps}</span>
+      </button>`;
+    })
+    .join("");
+  root.querySelectorAll(".describe-item").forEach((btn) => {
+    btn.addEventListener("click", () => showFieldDetail(btn.getAttribute("data-field")));
+  });
+}
+
+function showFieldDetail(fieldName) {
+  const field = state.describeFields.find((f) => f.name === fieldName);
+  if (!field) return;
+  const picks = field.picklistValues?.length
+    ? `<ul>${field.picklistValues
+        .map((p) => `<li><code>${escapeHtml(p.value)}</code> — ${escapeHtml(p.label)}</li>`)
+        .join("")}</ul>`
+    : "";
+  $("#describeDetail").innerHTML = `
+    <div class="finding info">
+      <div class="row wrap">
+        <strong>${escapeHtml(field.name)}</strong>
+        <button type="button" class="btn" id="copyFieldApi">Copy API name</button>
+      </div>
+      <p>${escapeHtml(field.label)} · ${escapeHtml(field.type)} · custom:${field.custom} · nillable:${field.nillable} · create:${field.createable} · update:${field.updateable}</p>
+      ${field.controllerName ? `<p>Controller: <code>${escapeHtml(field.controllerName)}</code></p>` : ""}
+      ${field.relationshipName ? `<p>Relationship: <code>${escapeHtml(field.relationshipName)}</code></p>` : ""}
+      ${picks}
+    </div>`;
+  $("#copyFieldApi")?.addEventListener("click", async () => {
+    await navigator.clipboard.writeText(field.name);
+  });
+
+  if (field.dependentPicklist && field.controllerName) {
+    const controller = state.describeFields.find((f) => f.name === field.controllerName);
+    if (controller) {
+      const map = buildDependentMap(controller, field);
+      renderDependentInteractive(map);
+    }
+  }
+}
+
+function renderDependentPicker(fields) {
+  const pairs = findDependentPairs(fields);
+  if (!pairs.length) {
+    $("#describeDependent").innerHTML = `<div class="hint">No dependent picklists on this object.</div>`;
+    return;
+  }
+  $("#describeDependent").innerHTML = `
+    <div class="summary-bar">Dependent picklists (${pairs.length})</div>
+    <label class="label" for="depPairSelect">Pair</label>
+    <select id="depPairSelect" class="select block-select"></select>
+    <div id="depInteractive"></div>`;
+  const sel = $("#depPairSelect");
+  pairs.forEach((p, i) => {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `${p.controller.name} → ${p.dependent.name}`;
+    sel.appendChild(opt);
+  });
+  const render = () => {
+    const pair = pairs[Number(sel.value)];
+    renderDependentInteractive(buildDependentMap(pair.controller, pair.dependent));
+  };
+  sel.addEventListener("change", render);
+  render();
+}
+
+function renderDependentInteractive(map) {
+  const host = $("#depInteractive") || $("#describeDependent");
+  if (!map) return;
+  host.innerHTML = `
+    <label class="label" for="depControllerValue">Controlling value (${escapeHtml(map.controllerName)})</label>
+    <select id="depControllerValue" class="select block-select"></select>
+    <div id="depValuesOut" class="finding info"></div>`;
+  const sel = $("#depControllerValue");
+  map.controllerValues.forEach((v) => {
+    const opt = document.createElement("option");
+    opt.value = v.value;
+    opt.textContent = `${v.label} (${v.value})`;
+    sel.appendChild(opt);
+  });
+  const paint = () => {
+    const vals = map.byController[sel.value] || [];
+    $("#depValuesOut").innerHTML = vals.length
+      ? `<strong>Controlled values for <code>${escapeHtml(sel.value)}</code> on ${escapeHtml(map.dependentName)}</strong>
+         <ul>${vals.map((v) => `<li><code>${escapeHtml(v.value)}</code> — ${escapeHtml(v.label)}</li>`).join("")}</ul>
+         <button type="button" class="btn" id="copyDepValues">Copy values</button>`
+      : `<p>No active dependent values for this controlling value.</p>`;
+    $("#copyDepValues")?.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(vals.map((v) => v.value).join("\n"));
+    });
+  };
+  sel.addEventListener("change", paint);
+  paint();
+}
+
+async function onSearchMeta() {
+  const query = $("#metaQuery").value.trim();
+  const typeId = $("#metaType").value || null;
+  $("#metaResults").innerHTML = `<div class="summary-bar">Searching…</div>`;
+  try {
+    const res = await send("searchMetadata", {
+      tabUrl: requireTabUrl(),
+      query,
+      typeId,
+      apiVersion: apiVersion()
+    });
+    if (!res.ok) throw new Error(res.error);
+    const hits = (res.result.results || []).filter((r) => !r.error && r.name);
+    const errors = (res.result.results || []).filter((r) => r.error);
+    if (!hits.length) {
+      $("#metaResults").innerHTML = `<div class="finding medium"><p>No matches.${errors[0] ? " " + escapeHtml(errors[0].typeLabel + ": " + errors[0].error) : ""}</p></div>`;
+      return;
+    }
+    $("#metaResults").innerHTML =
+      `<div class="summary-bar">${hits.length} match(es)</div>` +
+      hits
+        .map(
+          (h, i) => `<div class="finding info">
+          <strong>${escapeHtml(h.typeLabel)} · ${escapeHtml(h.name)}</strong>
+          <p>${h.lastModifiedDate ? escapeHtml(h.lastModifiedDate) : ""}</p>
+          <button type="button" class="btn" data-meta-open="${i}">Open in Setup</button>
+        </div>`
+        )
+        .join("");
+    $("#metaResults").querySelectorAll("[data-meta-open]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const h = hits[Number(btn.getAttribute("data-meta-open"))];
+        const base = lightningBaseFromOrg(state.org) || state.org?.origin;
+        const url = h.openPath.startsWith("http") ? h.openPath : `${base}${h.openPath}`;
+        await chrome.tabs.create({ url });
+      });
+    });
+  } catch (e) {
+    $("#metaResults").innerHTML = `<div class="finding high"><p>${escapeHtml(e.message)}</p></div>`;
+  }
+}
+
+async function onLoadPackageMembers() {
+  const typeName = $("#packageType").value;
+  $("#packageMembers").innerHTML = `<div class="hint">Loading…</div>`;
+  try {
+    const res = await send("listPackageTypeMembers", {
+      tabUrl: requireTabUrl(),
+      typeName,
+      apiVersion: apiVersion()
+    });
+    if (!res.ok) throw new Error(res.error);
+    state.packageMembersCache = (res.result.members || []).map((m) => ({
+      ...m,
+      type: res.result.type
+    }));
+    renderPackageMembers();
+    renderPackageSelection();
+  } catch (e) {
+    $("#packageMembers").innerHTML = `<div class="finding high"><p>${escapeHtml(e.message)}</p></div>`;
+  }
+}
+
+function renderPackageMembers() {
+  const root = $("#packageMembers");
+  const q = ($("#packageMemberFilter").value || "").trim().toLowerCase();
+  const members = state.packageMembersCache.filter(
+    (m) => !q || m.member.toLowerCase().includes(q) || (m.label || "").toLowerCase().includes(q)
+  );
+  if (!state.packageMembersCache.length) {
+    root.innerHTML = `<div class="hint">Load a metadata type to multi-select members.</div>`;
+    return;
+  }
+  root.innerHTML = members
+    .map((m) => {
+      const checked = state.packageSelections.some((s) => s.type === m.type && s.member === m.member);
+      return `<label class="pkg-item"><input type="checkbox" data-type="${escapeHtml(m.type)}" data-member="${escapeHtml(m.member)}" ${checked ? "checked" : ""}/> <span><code>${escapeHtml(m.member)}</code></span></label>`;
+    })
+    .join("");
+  root.querySelectorAll("input[type=checkbox]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const type = input.getAttribute("data-type");
+      const member = input.getAttribute("data-member");
+      if (input.checked) {
+        if (!state.packageSelections.some((s) => s.type === type && s.member === member)) {
+          state.packageSelections.push({ type, member });
+        }
+      } else {
+        state.packageSelections = state.packageSelections.filter(
+          (s) => !(s.type === type && s.member === member)
+        );
+      }
+      renderPackageSelection();
+    });
+  });
+}
+
+function renderPackageSelection() {
+  const grouped = {};
+  for (const s of state.packageSelections) {
+    grouped[s.type] = grouped[s.type] || [];
+    grouped[s.type].push(s.member);
+  }
+  const parts = Object.entries(grouped).map(([t, ms]) => `${t}(${ms.length})`);
+  $("#packageSelection").textContent = parts.length
+    ? `Selected: ${parts.join(", ")}`
+    : "Nothing selected yet.";
+}
+
+function onGenPackageXml() {
+  if (!state.packageSelections.length) {
+    $("#packageXmlOut").textContent = "Select at least one member.";
+    return;
+  }
+  state.lastPackageXml = buildPackageXml(state.packageSelections, packageVersion(apiVersion()));
+  $("#packageXmlOut").textContent = state.lastPackageXml;
+}
+
+async function onLoadInactiveFlows(scanField) {
+  $("#flowCleanStatus").textContent = scanField
+    ? "Loading inactive versions and scanning metadata for field references…"
+    : "Loading inactive flow versions…";
+  $("#flowCleanOut").innerHTML = "";
+  $("#flowCleanList").innerHTML = `<div class="hint">Loading…</div>`;
+  try {
+    const needle = buildFieldReferenceHint($("#flowCleanObject").value, $("#flowCleanField").value);
+    const res = await send("listInactiveFlowVersions", {
+      tabUrl: requireTabUrl(),
+      // Only apply field needle when scanning; otherwise use the list filter box only.
+      needle: scanField ? needle : "",
+      includeMetadata: Boolean(scanField && needle),
+      apiVersion: apiVersion()
+    });
+    if (!res.ok) throw new Error(res.error);
+    state.inactiveFlows = res.result.versions || [];
+    state.inactiveFlowSelected = [];
+    $("#flowCleanStatus").textContent = `Loaded ${res.result.matched}/${res.result.total} inactive version(s)${
+      scanField && needle ? ` · field scan: ${needle}` : ""
+    }${res.result.scannedMetadata ? " · metadata scanned" : ""}`;
+    renderInactiveFlows();
+  } catch (e) {
+    $("#flowCleanList").innerHTML = "";
+    $("#flowCleanStatus").textContent = e.message;
+  }
+}
+
+function renderInactiveFlows() {
+  const root = $("#flowCleanList");
+  const q = ($("#flowCleanFilter").value || "").trim().toLowerCase();
+  const rows = state.inactiveFlows.filter((f) => {
+    if (!q) return true;
+    return [f.label, f.definitionName, f.status, String(f.versionNumber || "")]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(q);
+  });
+  if (!state.inactiveFlows.length) {
+    root.innerHTML = `<div class="hint">No inactive versions loaded.</div>`;
+    return;
+  }
+  root.innerHTML = rows
+    .map((f) => {
+      const checked = state.inactiveFlowSelected.includes(f.id);
+      return `<label class="pkg-item">
+        <input type="checkbox" data-flow-id="${escapeHtml(f.id)}" ${checked ? "checked" : ""} ${f.canDelete ? "" : "disabled"} />
+        <span><code>v${escapeHtml(String(f.versionNumber ?? "?"))}</code> ${escapeHtml(f.label)}
+        <br/><span style="color:var(--muted);font-size:11px">${escapeHtml(f.definitionName || "")} · ${escapeHtml(f.status)} · ${escapeHtml(f.processType || "")}</span></span>
+      </label>`;
+    })
+    .join("");
+  root.querySelectorAll("input[data-flow-id]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const id = input.getAttribute("data-flow-id");
+      if (input.checked) {
+        if (!state.inactiveFlowSelected.includes(id)) state.inactiveFlowSelected.push(id);
+      } else {
+        state.inactiveFlowSelected = state.inactiveFlowSelected.filter((x) => x !== id);
+      }
+      $("#flowCleanStatus").textContent = `Selected ${state.inactiveFlowSelected.length} version(s)`;
+    });
+  });
+}
+
+async function onDeleteInactiveFlows() {
+  if (!state.inactiveFlowSelected.length) {
+    $("#flowCleanStatus").textContent = "Select at least one inactive version.";
+    return;
+  }
+  const names = state.inactiveFlows
+    .filter((f) => state.inactiveFlowSelected.includes(f.id))
+    .map((f) => `v${f.versionNumber} ${f.label} (${f.status})`)
+    .slice(0, 15);
+  const ok = confirm(
+    `Delete ${state.inactiveFlowSelected.length} inactive flow version(s)?\n\n${names.join("\n")}${
+      state.inactiveFlowSelected.length > 15 ? "\n…" : ""
+    }\n\nActive versions are never deleted. This cannot be undone.`
+  );
+  if (!ok) return;
+
+  $("#flowCleanStatus").textContent = "Deleting…";
+  try {
+    const res = await send("deleteFlowVersions", {
+      tabUrl: requireTabUrl(),
+      ids: state.inactiveFlowSelected,
+      apiVersion: apiVersion()
+    });
+    if (!res.ok) throw new Error(res.error);
+    const { deleted, failed, results } = res.result;
+    $("#flowCleanOut").innerHTML =
+      `<div class="summary-bar">Deleted ${deleted}, failed ${failed}</div>` +
+      results
+        .map(
+          (r) =>
+            `<div class="finding ${r.ok ? "info" : "high"}"><span class="tag">${r.ok ? "deleted" : "failed"}</span><p>${escapeHtml(
+              r.label || r.id
+            )}${r.error ? " — " + escapeHtml(r.error) : ""}</p></div>`
+        )
+        .join("");
+    // refresh list
+    await onLoadInactiveFlows(false);
+  } catch (e) {
+    $("#flowCleanStatus").textContent = e.message;
+  }
+}
+
+/* —— Utilities (links / soql / ids / favs) —— */
+
 function renderLinks(filter = "") {
   const q = filter.trim().toLowerCase();
   const root = $("#linkList");
   root.innerHTML = "";
-
   QUICK_LINKS.forEach((group) => {
     const items = group.items.filter((i) => !q || i.label.toLowerCase().includes(q) || i.id.includes(q));
     if (!items.length) return;
@@ -131,7 +988,6 @@ function renderLinks(filter = "") {
     title.className = "group-title";
     title.textContent = group.group;
     root.appendChild(title);
-
     items.forEach((item) => {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -152,52 +1008,38 @@ async function openQuickLink(item) {
     alert("Open a Salesforce org tab first.");
     return;
   }
-
   let url;
-  if (item.path.startsWith("http")) {
-    url = item.path;
-  } else if (item.path.startsWith("/_ui/") || item.classic?.startsWith("/_ui/")) {
-    url = `${state.session?.apiBase || state.org.apiBase}${item.path}`;
-  } else {
+  if (item.path.startsWith("http")) url = item.path;
+  else if (item.path.startsWith("/_ui/")) url = `${state.session?.apiBase || state.org.apiBase}${item.path}`;
+  else {
     const lightningHost = state.org.hostname.includes("lightning.force.com")
       ? state.org.origin
       : state.org.origin.replace(".my.salesforce.com", ".lightning.force.com");
     url = `${lightningHost}${item.path}`;
   }
-
-  if (item.newTab) {
-    await chrome.tabs.create({ url });
-  } else if (state.tab?.id) {
+  if (item.newTab) await chrome.tabs.create({ url });
+  else if (state.tab?.id) {
     await chrome.tabs.update(state.tab.id, { url });
     window.close();
-  } else {
-    await chrome.tabs.create({ url });
-  }
+  } else await chrome.tabs.create({ url });
 }
 
-async function runSoql() {
-  if (!state.tab?.url || !isSalesforceUrl(state.tab.url)) {
-    toastResult("Open a Salesforce tab first.");
-    return;
-  }
-  const query = $("#soqlInput").value;
-  toastResult("Running…");
-  const res = await send("runSoql", {
-    tabUrl: state.tab.url,
-    query,
-    apiVersion: $("#apiVersion").value
-  });
-  if (!res.ok) {
-    toastResult(`Error: ${res.error}`);
+async function runSoqlManual() {
+  const box = $("#soqlResult");
+  box.textContent = "Running…";
+  try {
+    const res = await send("runSoql", {
+      tabUrl: requireTabUrl(),
+      query: $("#soqlInput").value,
+      apiVersion: apiVersion()
+    });
+    if (!res.ok) throw new Error(res.error);
+    state.lastSoqlJson = JSON.stringify(res.result, null, 2);
+    box.textContent = state.lastSoqlJson;
+  } catch (e) {
+    box.textContent = e.message;
     state.lastSoqlJson = "";
-    return;
   }
-  state.lastSoqlJson = JSON.stringify(res.result, null, 2);
-  toastResult(state.lastSoqlJson);
-}
-
-function toastResult(text) {
-  $("#soqlResult").textContent = text;
 }
 
 function updateIdInfo() {
@@ -214,38 +1056,29 @@ function updateIdInfo() {
     info.textContent = "Not a valid 15/18 character Salesforce ID.";
     return;
   }
-  info.innerHTML = `
-    <div><strong>Type:</strong> ${type || "Unknown"}</div>
+  info.innerHTML = `<div><strong>Type:</strong> ${type || "Unknown"}</div>
     <div><strong>15:</strong> <code>${id15}</code></div>
-    <div><strong>18:</strong> <code>${id18 || to18(id15)}</code></div>
-  `;
+    <div><strong>18:</strong> <code>${id18 || to18(id15)}</code></div>`;
 }
 
 async function openRecord() {
-  if (!state.org) {
-    alert("Open a Salesforce org tab first.");
-    return;
-  }
+  if (!state.org) return alert("Open a Salesforce org tab first.");
   const id = normalizeSfId($("#idInput").value.trim()) || $("#idInput").value.trim();
   if (!id) return;
-  const url = buildRecordUrl(state.org, id, true);
-  await chrome.tabs.create({ url });
+  await chrome.tabs.create({ url: buildRecordUrl(state.org, id, true) });
 }
 
 async function copyIdLength(len) {
   const raw = $("#idInput").value.trim();
   if (!raw) return;
   const id15 = raw.slice(0, 15);
-  const value = len === 15 ? id15 : to18(id15);
-  await navigator.clipboard.writeText(value);
-  updateIdInfo();
+  await navigator.clipboard.writeText(len === 15 ? id15 : to18(id15));
 }
 
 async function scanPageIds() {
   const list = $("#scannedIds");
   list.innerHTML = "";
   if (!state.tab?.id) return;
-
   try {
     const [{ result }] = await chrome.scripting.executeScript({
       target: { tabId: state.tab.id },
@@ -261,23 +1094,19 @@ async function scanPageIds() {
         return [...found].slice(0, 40);
       }
     });
-
     if (!result?.length) {
       list.innerHTML = "<li>No IDs found on page text.</li>";
       return;
     }
-
     result.forEach((id) => {
       const li = document.createElement("li");
-      const type = decodeKeyPrefix(id.slice(0, 15));
-      li.innerHTML = `<span class="fav-meta"><code>${id}</code> · ${type || "?"}</span>`;
+      li.innerHTML = `<span class="fav-meta"><code>${id}</code> · ${decodeKeyPrefix(id.slice(0, 15)) || "?"}</span>`;
       const open = document.createElement("button");
       open.type = "button";
       open.textContent = "Use";
       open.addEventListener("click", () => {
         $("#idInput").value = id;
         updateIdInfo();
-        document.querySelector('.tab[data-tab="ids"]').click();
       });
       li.appendChild(open);
       list.appendChild(li);
@@ -307,13 +1136,10 @@ function renderFavorites() {
     meta.className = "fav-meta";
     meta.textContent = fav.label;
     meta.title = fav.url;
-    meta.addEventListener("click", async () => {
-      await chrome.tabs.create({ url: fav.url });
-    });
+    meta.addEventListener("click", () => chrome.tabs.create({ url: fav.url }));
     const del = document.createElement("button");
     del.type = "button";
     del.textContent = "✕";
-    del.title = "Remove";
     del.addEventListener("click", async () => {
       state.favorites.splice(index, 1);
       await chrome.storage.sync.set({ favorites: state.favorites });
@@ -329,13 +1155,8 @@ async function addFavorite() {
   let path = $("#favPath").value.trim();
   if (!label || !path) return;
   if (!path.startsWith("http")) {
-    if (!state.org) {
-      alert("Full URL required when no Salesforce tab is open.");
-      return;
-    }
-    path = path.startsWith("/")
-      ? `${state.org.origin}${path}`
-      : `${state.org.origin}/${path}`;
+    if (!state.org) return alert("Full URL required when no Salesforce tab is open.");
+    path = path.startsWith("/") ? `${state.org.origin}${path}` : `${state.org.origin}/${path}`;
   }
   state.favorites.unshift({ label, url: path });
   await chrome.storage.sync.set({ favorites: state.favorites.slice(0, 50) });
@@ -350,20 +1171,17 @@ async function saveCurrentPage() {
   state.favorites.unshift({ label, url: state.tab.url });
   await chrome.storage.sync.set({ favorites: state.favorites.slice(0, 50) });
   renderFavorites();
-  document.querySelector('.tab[data-tab="favs"]').click();
-}
-
-async function openDevConsole() {
-  if (!state.org) {
-    alert("Open a Salesforce org tab first.");
-    return;
-  }
-  const base = state.session?.apiBase || state.org.apiBase;
-  await chrome.tabs.create({ url: `${base}/_ui/common/apex/debug/ApexCSIPage` });
+  showView("favs");
 }
 
 function send(type, payload = {}) {
   return chrome.runtime.sendMessage({ type, ...payload });
 }
 
-updateIdInfo();
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}

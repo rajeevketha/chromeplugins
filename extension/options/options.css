@@ -103,6 +103,26 @@ select {
   color: #ffb4b0;
 }
 
+.text {
+  display: block;
+  width: 100%;
+  margin: 6px 0 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0f1c2e;
+  color: var(--text);
+  font: inherit;
+}
+
+label[for="aiApiKey"],
+label[for="aiBaseUrl"],
+label[for="aiModel"] {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
 .status {
   min-height: 1.2em;
   color: #7dcea0;

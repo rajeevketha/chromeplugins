@@ -12,29 +12,64 @@ async function init() {
     select.appendChild(opt);
   }
 
-  const data = await chrome.storage.sync.get({
+  const sync = await chrome.storage.sync.get({
     showBadge: true,
     showToolbar: true,
     apiVersion: DEFAULT_API_VERSION
   });
+  const local = await chrome.storage.local.get({
+    aiEnabled: false,
+    aiApiKey: "",
+    aiBaseUrl: "https://api.openai.com/v1",
+    aiModel: "gpt-4o-mini"
+  });
 
-  $("#showBadge").checked = data.showBadge;
-  $("#showToolbar").checked = data.showToolbar;
-  select.value = data.apiVersion || DEFAULT_API_VERSION;
+  $("#showBadge").checked = sync.showBadge;
+  $("#showToolbar").checked = sync.showToolbar;
+  select.value = sync.apiVersion || DEFAULT_API_VERSION;
+  $("#aiEnabled").checked = local.aiEnabled;
+  $("#aiApiKey").value = local.aiApiKey || "";
+  $("#aiBaseUrl").value = local.aiBaseUrl || "https://api.openai.com/v1";
+  $("#aiModel").value = local.aiModel || "gpt-4o-mini";
 
-  $("#showBadge").addEventListener("change", save);
-  $("#showToolbar").addEventListener("change", save);
-  select.addEventListener("change", save);
+  ["showBadge", "showToolbar", "apiVersion"].forEach((id) => {
+    $(`#${id}`).addEventListener("change", saveSync);
+  });
+  ["aiEnabled", "aiApiKey", "aiBaseUrl", "aiModel"].forEach((id) => {
+    $(`#${id}`).addEventListener("change", saveAi);
+  });
   $("#clearFavs").addEventListener("click", clearFavorites);
 }
 
-async function save() {
+async function saveSync() {
   await chrome.storage.sync.set({
     showBadge: $("#showBadge").checked,
     showToolbar: $("#showToolbar").checked,
     apiVersion: $("#apiVersion").value
   });
   flash("Saved.");
+}
+
+async function saveAi() {
+  const aiEnabled = $("#aiEnabled").checked;
+  const aiBaseUrl = $("#aiBaseUrl").value.trim() || "https://api.openai.com/v1";
+  const aiApiKey = $("#aiApiKey").value.trim();
+  const aiModel = $("#aiModel").value.trim() || "gpt-4o-mini";
+
+  if (aiEnabled) {
+    try {
+      const origin = new URL(aiBaseUrl).origin + "/*";
+      const granted = await chrome.permissions.request({ origins: [origin] });
+      if (!granted) {
+        flash("Host permission not granted — AI calls may fail.");
+      }
+    } catch {
+      flash("Could not request host permission for AI base URL.");
+    }
+  }
+
+  await chrome.storage.local.set({ aiEnabled, aiApiKey, aiBaseUrl, aiModel });
+  flash("AI settings saved locally.");
 }
 
 async function clearFavorites() {
@@ -47,7 +82,7 @@ function flash(msg) {
   status.textContent = msg;
   setTimeout(() => {
     status.textContent = "";
-  }, 1600);
+  }, 1800);
 }
 
 init();

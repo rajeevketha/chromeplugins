@@ -1,5 +1,5 @@
 ================================================================================
-Notes for Chrome Web Store reviewers — OrgKit 1.6.6
+Notes for Chrome Web Store reviewers — OrgKit 1.6.7
 ================================================================================
 
 Single purpose
@@ -7,6 +7,19 @@ Single purpose
 OrgKit is a Salesforce developer productivity extension. It helps users work in an
 org they already logged into in Chrome (SOQL/Tooling, describe/metadata, Apex/flow
 helpers). It is not a general web scraper, ad tool, or credential harvester.
+
+Session model (aligned with Salesforce Inspector Reloaded)
+----------------------------------------------------------
+OrgKit reuses the browser Salesforce session cookie (sid) on Salesforce domains only,
+then calls official Salesforce REST/Tooling APIs for user-started actions.
+This is the same approach documented by Salesforce Inspector Reloaded.
+
+Lean permissions
+----------------
+Required permissions: cookies, storage.
+Host permissions: Salesforce domains only.
+Optional: OpenAI hosts if the user enables AI.
+OrgKit does NOT request tabs, activeTab, or scripting.
 
 How to test (minimum path)
 --------------------------
@@ -16,7 +29,7 @@ How to test (minimum path)
 4. Confirm the banner shows Session: connected for that org.
 5. SOQL runner → SELECT Id, Name FROM Account LIMIT 5 → Run.
 6. NL→SOQL → Tooling API → “get all flows” → Generate → Run
-   (expects FlowDefinition fields; not DeveloperName on Flow).
+   (expects FlowDefinition fields).
 7. On a Salesforce page, use the right-edge OrgKit tab → Hide → Show restores it.
 8. Settings → Privacy Policy opens packaged privacy.html.
 

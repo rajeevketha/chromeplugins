@@ -89,12 +89,9 @@
 
       <h2>Permissions (why they exist)</h2>
       <ul>
-        <li><strong>cookies</strong> — read Salesforce <code>sid</code> on Salesforce domains only.</li>
-        <li><strong>tabs</strong> — detect the active Salesforce tab / org context.</li>
-        <li><strong>scripting</strong> — fallback API requests from a Salesforce tab if Chrome blocks extension fetch.</li>
-        <li><strong>storage</strong> — settings, favorites, saved queries, optional AI key (local).</li>
-        <li><strong>activeTab</strong> — user-gesture access when interacting with the current tab.</li>
-        <li><strong>Host access to Salesforce domains</strong> — call Salesforce APIs and inject the on-page launcher.</li>
+        <li><strong>cookies</strong> — read Salesforce <code>sid</code> on Salesforce domains only (same session model as tools like Salesforce Inspector Reloaded).</li>
+        <li><strong>storage</strong> — settings, favorites, saved queries, optional AI key (local). Never stores <code>sid</code>.</li>
+        <li><strong>Host access to Salesforce domains</strong> — call Salesforce APIs and show the on-page OrgKit launcher on Salesforce pages only.</li>
         <li><strong>Optional OpenAI hosts</strong> — only after you enable AI and grant access.</li>
       </ul>
 

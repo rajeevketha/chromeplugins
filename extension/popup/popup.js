@@ -2445,23 +2445,15 @@ async function copyIdLength(len) {
 async function scanPageIds() {
   const list = $("#scannedIds");
   list.innerHTML = "";
-  if (!state.tab?.id) return;
+  if (!state.tab?.id) {
+    list.innerHTML = "<li>Open a Salesforce tab first.</li>";
+    return;
+  }
   try {
-    const [{ result }] = await chrome.scripting.executeScript({
-      target: { tabId: state.tab.id },
-      func: () => {
-        const re = /\b([a-zA-Z0-9]{15}|[a-zA-Z0-9]{18})\b/g;
-        const text = document.body?.innerText || "";
-        const found = new Set();
-        let m;
-        while ((m = re.exec(text)) !== null) {
-          const id = m[1];
-          if (/[0-9]/.test(id.slice(0, 3)) || /^[a-zA-Z][0-9]/.test(id)) found.add(id);
-        }
-        return [...found].slice(0, 40);
-      }
-    });
-    if (!result?.length) {
+    // Declared content script only — no chrome.scripting permission.
+    const res = await chrome.tabs.sendMessage(state.tab.id, { type: "orgkitScanIds" });
+    const result = Array.isArray(res?.ids) ? res.ids : [];
+    if (!result.length) {
       list.innerHTML = "<li>No IDs found on page text.</li>";
       return;
     }
@@ -2479,7 +2471,7 @@ async function scanPageIds() {
       list.appendChild(li);
     });
   } catch (err) {
-    list.innerHTML = `<li>Scan failed: ${err.message}</li>`;
+    list.innerHTML = `<li>Scan failed — refresh the Salesforce tab and retry (${escapeHtml(err.message)})</li>`;
   }
 }
 

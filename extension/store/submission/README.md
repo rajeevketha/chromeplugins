@@ -1,10 +1,10 @@
-# OrgKit Chrome Web Store submission pack (v1.6.6)
+# OrgKit Chrome Web Store submission pack (v1.6.7)
 
 This folder is everything you need to submit OrgKit.
 
 | Item | File |
 |---|---|
-| Upload zip | `../../OrgKit-1.6.6-store.zip` (also in Files: `OrgKit-1.6.6-store.zip`) |
+| Upload zip | `../../OrgKit-1.6.7-store.zip` (also in Files: `OrgKit-1.6.7-store.zip`) |
 | Checklist | `SUBMIT_CHECKLIST.md` |
 | Listing copy | `LISTING_COPY.txt` |
 | Permission justifications | `PERMISSION_JUSTIFICATIONS.txt` |

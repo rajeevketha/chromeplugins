@@ -85,7 +85,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
     fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.6.6",
+      version: "1.6.7",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       hasExecuteAnonymous: typeof executeAnonymous === "function",
@@ -134,25 +134,12 @@ async function openOrgKitTab(view) {
 }
 
 /**
- * Run a Salesforce REST/Tooling request. Prefer service-worker fetch; if Chrome
- * blocks it ("Failed to fetch"), retry via scripting inside a Salesforce tab.
+ * Run a Salesforce REST/Tooling request from the service worker.
+ * Uses declared Salesforce host_permissions + the browser session cookie (sid).
+ * No chrome.scripting injection — same session model as Salesforce Inspector Reloaded.
  */
 async function sfFetchUrl(url, sid, options = {}) {
-  try {
-    return await sfFetchUrlDirect(url, sid, options);
-  } catch (e) {
-    const msg = e?.message || String(e);
-    if (!/Failed to fetch|Failed to reach Salesforce|NetworkError|Load failed/i.test(msg)) {
-      throw e;
-    }
-    try {
-      return await sfFetchViaSalesforceTab(url, sid, options);
-    } catch (e2) {
-      throw new Error(
-        `${networkBlockedMessage(url, e)} Fallback via Salesforce tab also failed: ${e2.message || e2}`
-      );
-    }
-  }
+  return sfFetchUrlDirect(url, sid, options);
 }
 
 async function sfFetchUrlDirect(url, sid, options = {}) {
@@ -197,74 +184,8 @@ async function sfFetchUrlDirect(url, sid, options = {}) {
   return body == null ? { ok: true } : body;
 }
 
-async function sfFetchViaSalesforceTab(url, sid, options = {}) {
-  const tab = await findSalesforceTab();
-  if (!tab?.id) {
-    throw new Error("No Salesforce tab available for API fallback.");
-  }
-  const method = options.method || "GET";
-  const requestBody =
-    options.body == null ? null : typeof options.body === "string" ? options.body : JSON.stringify(options.body);
-  // Pass token only into the extension isolated world; never log it.
-  const [{ result }] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    world: "ISOLATED",
-    args: [url, sid, method, requestBody],
-    func: async (fetchUrl, token, httpMethod, bodyText) => {
-      try {
-        const headers = {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json"
-        };
-        if (bodyText != null) headers["Content-Type"] = "application/json";
-        const res = await fetch(fetchUrl, {
-          method: httpMethod,
-          headers,
-          body: bodyText == null ? undefined : bodyText,
-          credentials: "omit"
-        });
-        const text = await res.text();
-        return { status: res.status, ok: res.ok, text };
-      } catch (err) {
-        return { error: String(err && err.message ? err.message : err) };
-      }
-    }
-  });
-
-  if (!result) throw new Error("Empty response from Salesforce tab fetch.");
-  if (result.error) throw new Error(result.error);
-  if (
-    (method === "DELETE" || method === "PATCH" || method === "PUT") &&
-    (result.status === 204 || result.status === 200)
-  ) {
-    if (result.status === 204) return { ok: true };
-  }
-
-  let body;
-  try {
-    body = result.text ? JSON.parse(result.text) : null;
-  } catch {
-    body = result.text;
-  }
-  if (!result.ok) {
-    const msg =
-      (Array.isArray(body) && body[0]?.message) || body?.message || `HTTP ${result.status}`;
-    throw new Error(msg);
-  }
-  return body == null ? { ok: true } : body;
-}
-
 async function sfFetchText(url, sid) {
-  try {
-    return await sfFetchTextDirect(url, sid);
-  } catch (e) {
-    const msg = e?.message || String(e);
-    if (!/Failed to fetch|Failed to reach Salesforce|NetworkError|Load failed/i.test(msg)) {
-      throw e;
-    }
-    const body = await sfFetchViaSalesforceTab(url, sid, { method: "GET" });
-    return typeof body === "string" ? body : JSON.stringify(body);
-  }
+  return sfFetchTextDirect(url, sid);
 }
 
 async function sfFetchTextDirect(url, sid) {

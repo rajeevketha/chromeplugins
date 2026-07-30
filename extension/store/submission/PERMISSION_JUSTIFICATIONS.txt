@@ -1,26 +1,15 @@
 ================================================================================
 Permission justifications — paste into Chrome Web Store Dashboard
+OrgKit 1.6.7 (Inspector-aligned lean permissions)
 ================================================================================
 
 cookies
 -------
-Required to read the Salesforce sid cookie on Salesforce-related domains so OrgKit can call Salesforce REST/Tooling APIs using the user’s existing logged-in browser session. OrgKit does not read cookies from non-Salesforce sites. The sid is used in-browser as an Authorization bearer token, is never written to sync storage, and is never sent to AI providers.
-
-tabs
-----
-Required to identify the active Salesforce tab, resolve the correct org host, and open OrgKit / records / Setup pages in the right org context.
-
-scripting
----------
-Required as a fallback to execute Salesforce API requests from an open Salesforce tab when Chrome site-access rules block the extension service worker fetch. Used only for Salesforce hosts and only for user-initiated actions.
+Required to read the Salesforce sid cookie on Salesforce-related domains so OrgKit can call Salesforce REST/Tooling APIs using the user’s existing logged-in browser session. This is the same session model used by established Salesforce developer tools such as Salesforce Inspector Reloaded. OrgKit does not read cookies from non-Salesforce sites. The sid is used in-browser as an Authorization bearer token, is never written to sync storage, and is never sent to AI providers.
 
 storage
 -------
-Required to store user settings, favorites, saved SOQL library entries, UI preferences, and optional AI configuration locally in the browser profile. Session cookies are not stored in extension sync storage.
-
-activeTab
----------
-Required for user-initiated interaction with the active tab when opening OrgKit features from the toolbar icon or keyboard command (Alt+Shift+O). OrgKit uses activeTab only in response to a user gesture, not for background scraping of arbitrary sites.
+Required to store user settings, favorites, saved SOQL library entries, UI preferences, and optional AI configuration locally in the browser profile. Session cookies are not stored in extension storage.
 
 Host permissions
   https://*.salesforce.com/*
@@ -29,10 +18,14 @@ Host permissions
   https://*.salesforce-setup.com/*
   https://*.visualforce.com/*
 ---------------------------------
-Required to call Salesforce APIs and to show the on-page OrgKit launcher / quick links on Salesforce pages. Not used for unrelated websites.
+Required to call Salesforce APIs from the extension service worker and to show the on-page OrgKit launcher / quick links on Salesforce pages. Not used for unrelated websites. Host scope is limited to Salesforce properties (narrower than some comparable tools).
 
 Optional host permissions
   https://api.openai.com/*
   https://*.openai.com/*
 ---------------------------------
 Only if the user enables AI assist and grants permission. Used solely for optional NL/formula/error/Apex assistance with the user’s own API key. Salesforce session cookies are never included in AI prompts.
+
+Permissions intentionally NOT requested
+---------------------------------------
+OrgKit does not request tabs, activeTab, or scripting. Salesforce tab context is resolved via declared Salesforce host permissions; page helpers use a declared content script; API calls use service-worker fetch with the sid cookie — matching the lean permission model of Salesforce Inspector Reloaded.

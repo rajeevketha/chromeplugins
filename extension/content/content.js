@@ -62,6 +62,28 @@
     });
 
     document.addEventListener("mouseup", onSelectionHint);
+
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message?.type !== "orgkitScanIds") return;
+      try {
+        sendResponse({ ok: true, ids: scanPageForIds() });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err?.message || err) });
+      }
+      return true;
+    });
+  }
+
+  function scanPageForIds() {
+    const re = /\b([a-zA-Z0-9]{15}|[a-zA-Z0-9]{18})\b/g;
+    const text = document.body?.innerText || "";
+    const found = new Set();
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const id = m[1];
+      if (/[0-9]/.test(id.slice(0, 3)) || /^[a-zA-Z][0-9]/.test(id)) found.add(id);
+    }
+    return [...found].slice(0, 40);
   }
 
   function envInfo() {

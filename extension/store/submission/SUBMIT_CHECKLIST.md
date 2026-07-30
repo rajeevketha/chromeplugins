@@ -1,11 +1,12 @@
-# OrgKit — Chrome Web Store submit checklist (v1.6.6)
+# OrgKit — Chrome Web Store submit checklist (v1.6.7)
 
-Use this pack end-to-end. Everything you need is under `extension/store/submission/` and mirrored in Files as `OrgKit-CWS-1.6.6/`.
+Use this pack end-to-end. Everything you need is under `extension/store/submission/` and mirrored in Files as `OrgKit-CWS-1.6.7/`.
 
 ## 1. Upload package (required)
 
-- [ ] Upload **`OrgKit-1.6.6-store.zip`** (manifest at zip root)
-- [ ] Confirm version in Dashboard matches **1.6.6**
+- [ ] Upload **`OrgKit-1.6.7-store.zip`** (manifest at zip root)
+- [ ] Confirm version in Dashboard matches **1.6.7**
+- [ ] Confirm permissions are only **cookies** + **storage** (+ Salesforce hosts; OpenAI optional)
 - [ ] Do **not** upload workspace junk, `.cursor/`, or API keys
 
 ## 2. Store listing (required)
@@ -34,8 +35,9 @@ Use this pack end-to-end. Everything you need is under `extension/store/submissi
 ## 4. Permissions (required)
 
 - [ ] Paste justifications from `PERMISSION_JUSTIFICATIONS.txt` for:
-  cookies, tabs, scripting, storage, activeTab, host permissions, optional OpenAI hosts
+  cookies, storage, host permissions, optional OpenAI hosts
 - [ ] Single purpose from `LISTING_COPY.txt`
+- [ ] Mention Inspector-aligned session model in reviewer notes if asked
 
 ## 5. Reviewer notes / proofs
 

@@ -20,7 +20,7 @@ Required to store user settings, favorites, saved SOQL library entries, UI prefe
 
 activeTab
 ---------
-Used for user-initiated interaction with the current tab when opening OrgKit features from the toolbar / keyboard command.
+Required for user-initiated interaction with the active tab when opening OrgKit features from the toolbar icon or keyboard command (Alt+Shift+O). OrgKit uses activeTab only in response to a user gesture, not for background scraping of arbitrary sites.
 
 Host permissions
   https://*.salesforce.com/*

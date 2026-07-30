@@ -1,11 +1,11 @@
-# OrgKit — Chrome Web Store submit checklist (v1.6.7)
+# OrgKit — Chrome Web Store submit checklist (v1.6.9)
 
-Use this pack end-to-end. Everything you need is under `extension/store/submission/` and mirrored in Files as `OrgKit-CWS-1.6.7/`.
+Use this pack end-to-end. Everything you need is under `extension/store/submission/` and mirrored in Files as `OrgKit-CWS-1.6.9/`.
 
 ## 1. Upload package (required)
 
-- [ ] Upload **`OrgKit-1.6.7-store.zip`** (manifest at zip root)
-- [ ] Confirm version in Dashboard matches **1.6.7**
+- [ ] Upload **`OrgKit-1.6.9-store.zip`** (manifest at zip root)
+- [ ] Confirm version in Dashboard matches **1.6.9**
 - [ ] Confirm permissions are only **cookies** + **storage** (+ Salesforce hosts; OpenAI optional)
 - [ ] Do **not** upload workspace junk, `.cursor/`, or API keys
 
@@ -46,13 +46,15 @@ Use this pack end-to-end. Everything you need is under `extension/store/submissi
 
 ## 6. Pre-flight test (do this before clicking Submit)
 
-- [ ] Fresh Chrome profile → Load/`sid` via real Salesforce login on a sandbox/DE
+- [ ] Fresh Chrome profile → real Salesforce login on a sandbox/DE
 - [ ] Open OrgKit → Session: connected
-- [ ] Run SOQL on Account LIMIT 5
-- [ ] NL→SOQL Tooling: “get all flows” → FlowDefinition (no DeveloperName-on-Flow error)
+- [ ] Run SOQL on a custom object (`Something__c`) LIMIT 5
+- [ ] Describe Browser → search custom object by label or API name
+- [ ] NL→SOQL Tooling: “get all flows” → FlowDefinition
 - [ ] Hide edge tab → **Show** restores it
 - [ ] Settings → Privacy Policy opens
 - [ ] Delete/Save paths still ask for confirmation
+- [ ] Confirm Deploy Readiness is not present in the UI
 
 ## 7. Publisher account
 

@@ -1,6 +1,6 @@
 ================================================================================
 Permission justifications — paste into Chrome Web Store Dashboard
-OrgKit 1.6.7 (Inspector-aligned lean permissions)
+OrgKit 1.6.9 (Inspector-aligned lean permissions)
 ================================================================================
 
 cookies
@@ -18,7 +18,7 @@ Host permissions
   https://*.salesforce-setup.com/*
   https://*.visualforce.com/*
 ---------------------------------
-Required to call Salesforce APIs from the extension service worker and to show the on-page OrgKit launcher / quick links on Salesforce pages. Not used for unrelated websites. Host scope is limited to Salesforce properties (narrower than some comparable tools).
+Required to call Salesforce APIs from the extension service worker and to show the on-page OrgKit launcher / quick links on Salesforce pages. Not used for unrelated websites. Host scope is limited to Salesforce properties.
 
 Optional host permissions
   https://api.openai.com/*

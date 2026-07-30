@@ -1,12 +1,13 @@
 ================================================================================
-Notes for Chrome Web Store reviewers — OrgKit 1.6.7
+Notes for Chrome Web Store reviewers — OrgKit 1.6.9
 ================================================================================
 
 Single purpose
 --------------
 OrgKit is a Salesforce developer productivity extension. It helps users work in an
-org they already logged into in Chrome (SOQL/Tooling, describe/metadata, Apex/flow
-helpers). It is not a general web scraper, ad tool, or credential harvester.
+org they already logged into in Chrome (SOQL/Tooling, describe/metadata including
+custom objects, Apex/flow helpers). It is not a general web scraper, ad tool, or
+credential harvester.
 
 Session model (aligned with Salesforce Inspector Reloaded)
 ----------------------------------------------------------
@@ -23,15 +24,15 @@ OrgKit does NOT request tabs, activeTab, or scripting.
 
 How to test (minimum path)
 --------------------------
-1. Install the uploaded package.
+1. Install the uploaded package (OrgKit 1.6.9).
 2. Sign in to any Salesforce sandbox / Developer Edition in Chrome.
 3. Open OrgKit from the toolbar icon (or Alt+Shift+O).
 4. Confirm the banner shows Session: connected for that org.
-5. SOQL runner → SELECT Id, Name FROM Account LIMIT 5 → Run.
-6. NL→SOQL → Tooling API → “get all flows” → Generate → Run
-   (expects FlowDefinition fields).
-7. On a Salesforce page, use the right-edge OrgKit tab → Hide → Show restores it.
-8. Settings → Privacy Policy opens packaged privacy.html.
+5. SOQL runner → query a standard or custom object (e.g. SELECT Id, Name FROM Account LIMIT 5).
+6. Describe Browser → search a custom object by label or API name (__c).
+7. NL→SOQL → Tooling API → “get all flows” → Generate → Run (FlowDefinition).
+8. On a Salesforce page, use the right-edge OrgKit tab → Hide → Show restores it.
+9. Settings → Privacy Policy opens packaged privacy.html.
 
 Why cookies / host permissions are needed
 -----------------------------------------

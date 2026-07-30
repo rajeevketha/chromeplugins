@@ -629,3 +629,46 @@ html.shell-wide .link-list {
 }
 .pkg-item:last-child { border-bottom: 0; }
 .pkg-item:hover { background: var(--surface-2); }
+
+.soql-lib-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.soql-lib-main {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.soql-lib-main strong {
+  color: var(--text);
+  font-size: 12.5px;
+}
+.soql-lib-main code {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.soql-lib-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.soql-lib-actions .btn {
+  padding: 5px 8px;
+  font-size: 11.5px;
+}
+.inline-pre {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #b7d0ea;
+}

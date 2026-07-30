@@ -48,10 +48,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     listInactiveFlowVersions: () =>
       listInactiveFlowVersions(message.tabUrl, message.needle, message.includeMetadata, message.apiVersion),
     deleteFlowVersions: () => deleteFlowVersions(message.tabUrl, message.ids, message.apiVersion),
+    executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
+    fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.3.3",
+      version: "1.4.0",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
+      hasExecuteAnonymous: typeof executeAnonymous === "function",
       metadataTypeCount: METADATA_SEARCH_TYPES.length,
       packageTypeCount: PACKAGE_TYPES.length
     })
@@ -436,6 +439,72 @@ async function deleteFlowVersions(tabUrl, ids, apiVersion = DEFAULT_API_VERSION)
     failed: results.filter((r) => !r.ok).length,
     results
   };
+}
+
+async function executeAnonymous(tabUrl, apex, apiVersion = DEFAULT_API_VERSION) {
+  const body = String(apex || "").trim();
+  if (!body) throw new Error("Apex body is empty.");
+  if (body.length > 12000) {
+    throw new Error("Apex body is too long for the Tooling executeAnonymous URL limit (~12k). Shorten it.");
+  }
+  // Security: execute only via authenticated user session; never log/store the body or sid.
+  const { session } = await requireSession(tabUrl);
+  const url = restUrl(
+    session.apiBase,
+    `/tooling/executeAnonymous/?anonymousBody=${encodeURIComponent(body)}`,
+    apiVersion
+  );
+  const result = await sfFetchUrl(url, session.sid);
+  return {
+    ...result,
+    executedAt: new Date().toISOString()
+  };
+}
+
+async function fetchLatestApexDebug(tabUrl, apiVersion = DEFAULT_API_VERSION) {
+  const { session } = await requireSession(tabUrl);
+  const userId = session.userInfo?.user_id || session.userInfo?.userId;
+  let q = "SELECT Id, StartTime, Status, LogLength, LogUserId FROM ApexLog ORDER BY StartTime DESC LIMIT 1";
+  if (userId && /^[a-zA-Z0-9]{15,18}$/.test(userId)) {
+    q = `SELECT Id, StartTime, Status, LogLength, LogUserId FROM ApexLog WHERE LogUserId = '${userId}' ORDER BY StartTime DESC LIMIT 1`;
+  }
+  const data = await toolingQuery(tabUrl, q, apiVersion);
+  const log = data.records?.[0];
+  if (!log?.Id) {
+    throw new Error("No Apex debug log found. Set a Trace Flag for your user in Setup, then execute again.");
+  }
+  const bodyUrl = restUrl(session.apiBase, `/tooling/sobjects/ApexLog/${log.Id}/Body`, apiVersion);
+  const bodyText = await sfFetchText(bodyUrl, session.sid);
+  return {
+    logId: log.Id,
+    startTime: log.StartTime,
+    status: log.Status,
+    logLength: log.LogLength,
+    body: bodyText
+  };
+}
+
+async function sfFetchText(url, sid) {
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${sid}`,
+      Accept: "text/plain, application/json"
+    },
+    credentials: "omit"
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const body = JSON.parse(text);
+      msg = (Array.isArray(body) && body[0]?.message) || body?.message || msg;
+    } catch {
+      /* keep status */
+    }
+    throw new Error(msg);
+  }
+  return text;
 }
 
 async function sfFetchUrl(url, sid, options = {}) {

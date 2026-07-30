@@ -33,6 +33,7 @@
       <div class="util-row">
         <button type="button" class="btn" data-open="links">Setup links</button>
         <button type="button" class="btn" data-open="soql-run">SOQL runner</button>
+        <button type="button" class="btn" data-open="anon-apex">Anonymous Apex</button>
         <button type="button" class="btn" data-open="ids">ID tools</button>
         <button type="button" class="btn" data-open="favs">Favorites</button>
       </div>
@@ -217,13 +218,17 @@
     <div id="linkList" class="link-list"></div>
   </section>
 
-  <!-- UTIL: SOQL runner -->
+  <!-- UTIL: SOQL runner + saved library -->
   <section id="view-soql-run" class="view">
     <label class="label" for="soqlInput">SOQL</label>
     <textarea id="soqlInput" class="textarea" rows="5" placeholder="SELECT Id, Name FROM Account LIMIT 10"></textarea>
-    <div class="row">
+    <div class="row wrap">
       <select id="apiVersion" class="select" title="API version"></select>
       <button type="button" class="btn primary" id="runSoql">Run query</button>
+      <button type="button" class="btn" id="saveSoqlBtn">Save to library</button>
+    </div>
+    <div class="row wrap">
+      <input type="text" id="soqlSaveName" class="input grow" placeholder="Name for saved query (e.g. Open Cases)" maxlength="80" />
     </div>
     <div id="soqlQueryPanel" class="query-panel hidden" data-query-panel="soql">
       <div class="query-toolbar">
@@ -236,6 +241,30 @@
       <div class="query-table-wrap" data-query-table></div>
     </div>
     <div id="soqlQueryStatus" class="query-status"></div>
+
+    <div class="label">Saved SOQL library</div>
+    <p class="hint" id="soqlLibraryHint">Pinned and recent queries for this org. Stored locally in the browser — never includes session.</p>
+    <input type="search" id="soqlLibraryFilter" class="input" placeholder="Filter saved queries…" />
+    <div id="soqlLibraryList" class="package-members"></div>
+  </section>
+
+  <!-- FEATURE: Anonymous Apex -->
+  <section id="view-anon-apex" class="view">
+    <p class="hint">
+      Runs Apex with your current org session via Tooling <code>executeAnonymous</code>.
+      Debug lines need an active Trace Flag; then use Fetch debug log.
+    </p>
+    <label class="label" for="apexSnippet">Snippet</label>
+    <select id="apexSnippet" class="select block-select"></select>
+    <label class="label" for="anonApexInput">Anonymous Apex</label>
+    <textarea id="anonApexInput" class="textarea" rows="10" placeholder="System.debug('hello');"></textarea>
+    <div class="row wrap">
+      <button type="button" class="btn primary" id="runAnonApex">Execute</button>
+      <button type="button" class="btn" id="fetchAnonDebug">Fetch debug log</button>
+      <button type="button" class="btn ghost" id="copyAnonApex">Copy Apex</button>
+    </div>
+    <div id="anonApexResult" class="report"></div>
+    <pre id="anonApexDebug" class="result dim"></pre>
   </section>
 
   <!-- UTIL: IDs -->

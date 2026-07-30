@@ -34,8 +34,21 @@ import {
   defaultExportBasename,
   copyText
 } from "../lib/query-export.js";
+import {
+  listSavedSoql,
+  saveSoqlEntry,
+  deleteSavedSoql,
+  togglePinnedSoql
+} from "../lib/soql-library.js";
+import {
+  APEX_SNIPPETS,
+  summarizeExecuteAnonymous,
+  extractDebugOutput
+} from "../lib/anonymous-apex.js";
 
 const FEATURES = [
+  { id: "soql-run", title: "SOQL Runner", blurb: "Run, save library, Excel/Sheets" },
+  { id: "anon-apex", title: "Anonymous Apex", blurb: "Execute + pull debug output" },
   { id: "describe", title: "Describe Browser", blurb: "Fields, picklists, dependencies" },
   { id: "meta-open", title: "Metadata Quick Open", blurb: "Jump to class, flow, LWC…" },
   { id: "package", title: "Package.xml Builder", blurb: "Multi-select → package.xml" },
@@ -68,6 +81,7 @@ const TITLES = {
   apex: "Apex Review",
   links: "Setup Links",
   "soql-run": "SOQL Runner",
+  "anon-apex": "Anonymous Apex",
   ids: "ID Tools",
   favs: "Favorites"
 };
@@ -96,7 +110,9 @@ const state = {
   packageMembersCache: [],
   lastPackageXml: "",
   inactiveFlows: [],
-  inactiveFlowSelected: []
+  inactiveFlowSelected: [],
+  soqlLibrary: [],
+  editingSoqlId: null
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -115,11 +131,13 @@ async function init() {
   fillApiVersions();
   fillMetaTypeSelect();
   fillPackageTypeSelect();
+  fillApexSnippets();
   renderLinks();
   renderFormulaHelpers();
   await loadFavorites();
   await loadDeployChecklist();
   await refreshOrg();
+  await refreshSoqlLibrary();
   showView("home");
 }
 
@@ -167,6 +185,9 @@ function showView(id) {
   $("#backBtn").classList.toggle("hidden", id === "home");
   if (id === "describe" && !state.globalObjects) {
     preloadGlobalObjects().catch(() => {});
+  }
+  if (id === "soql-run") {
+    refreshSoqlLibrary().catch(() => {});
   }
 }
 
@@ -245,8 +266,20 @@ function bindFeatureActions() {
 function bindUtilityActions() {
   $("#linkSearch").addEventListener("input", () => renderLinks($("#linkSearch").value));
   $("#runSoql").addEventListener("click", runSoqlManual);
+  $("#saveSoqlBtn").addEventListener("click", onSaveSoqlToLibrary);
+  $("#soqlLibraryFilter").addEventListener("input", () => renderSoqlLibrary());
   bindQueryExportPanel($("#soqlQueryPanel"), "soql", $("#soqlQueryStatus"));
   bindQueryExportPanel($("#nlQueryPanel"), "nl", $("#nlQueryStatus"));
+  $("#runAnonApex").addEventListener("click", onRunAnonApex);
+  $("#fetchAnonDebug").addEventListener("click", onFetchAnonDebug);
+  $("#copyAnonApex").addEventListener("click", async () => {
+    const body = $("#anonApexInput").value;
+    if (body) await navigator.clipboard.writeText(body);
+  });
+  $("#apexSnippet").addEventListener("change", () => {
+    const snip = APEX_SNIPPETS.find((s) => s.id === $("#apexSnippet").value);
+    if (snip) $("#anonApexInput").value = snip.body;
+  });
   $("#idInput").addEventListener("input", updateIdInfo);
   $("#openRecord").addEventListener("click", openRecord);
   $("#copy15").addEventListener("click", () => copyIdLength(15));
@@ -397,6 +430,195 @@ async function refreshOrg() {
   state.org = res.result.org;
   state.session = res.result.session;
   setOrgBanner(state.org, state.session);
+  await refreshSoqlLibrary();
+}
+
+function currentOrgKey() {
+  return (
+    state.session?.userInfo?.organization_id ||
+    state.org?.myDomain ||
+    state.org?.hostname ||
+    "default"
+  );
+}
+
+function fillApexSnippets() {
+  const select = $("#apexSnippet");
+  if (!select) return;
+  select.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = "Choose a snippet…";
+  select.appendChild(blank);
+  for (const s of APEX_SNIPPETS) {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = s.label;
+    select.appendChild(opt);
+  }
+}
+
+async function refreshSoqlLibrary() {
+  try {
+    state.soqlLibrary = await listSavedSoql(currentOrgKey());
+  } catch {
+    state.soqlLibrary = [];
+  }
+  renderSoqlLibrary();
+}
+
+function renderSoqlLibrary() {
+  const root = $("#soqlLibraryList");
+  const hint = $("#soqlLibraryHint");
+  if (!root) return;
+  const filter = ($("#soqlLibraryFilter")?.value || "").trim().toLowerCase();
+  const rows = state.soqlLibrary.filter((r) => {
+    if (!filter) return true;
+    return `${r.name} ${r.soql}`.toLowerCase().includes(filter);
+  });
+  if (hint) {
+    hint.textContent = `Org key: ${currentOrgKey()} · ${state.soqlLibrary.length} saved (local only).`;
+  }
+  root.replaceChildren();
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "query-empty";
+    empty.textContent = filter ? "No saved queries match this filter." : "No saved queries yet. Run one and click Save to library.";
+    root.appendChild(empty);
+    return;
+  }
+  for (const row of rows) {
+    const item = document.createElement("div");
+    item.className = "pkg-item soql-lib-item";
+    const main = document.createElement("div");
+    main.className = "soql-lib-main";
+    const title = document.createElement("strong");
+    title.textContent = `${row.pinned ? "★ " : ""}${row.name}`;
+    const preview = document.createElement("code");
+    preview.textContent = row.soql.length > 120 ? `${row.soql.slice(0, 117)}…` : row.soql;
+    main.appendChild(title);
+    main.appendChild(document.createElement("br"));
+    main.appendChild(preview);
+
+    const actions = document.createElement("div");
+    actions.className = "soql-lib-actions";
+    const mkBtn = (label, cls, onClick) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = cls || "btn";
+      b.textContent = label;
+      b.addEventListener("click", onClick);
+      return b;
+    };
+    actions.appendChild(
+      mkBtn("Load", "btn", () => {
+        $("#soqlInput").value = row.soql;
+        $("#soqlSaveName").value = row.name;
+        state.editingSoqlId = row.id;
+        $("#soqlQueryStatus").textContent = `Loaded “${row.name}”.`;
+      })
+    );
+    actions.appendChild(
+      mkBtn("Run", "btn primary", async () => {
+        $("#soqlInput").value = row.soql;
+        $("#soqlSaveName").value = row.name;
+        state.editingSoqlId = row.id;
+        await runSoqlManual();
+      })
+    );
+    actions.appendChild(
+      mkBtn(row.pinned ? "Unpin" : "Pin", "btn ghost", async () => {
+        state.soqlLibrary = await togglePinnedSoql(currentOrgKey(), row.id);
+        renderSoqlLibrary();
+      })
+    );
+    actions.appendChild(
+      mkBtn("Delete", "btn danger", async () => {
+        if (!confirm(`Delete saved query “${row.name}”?`)) return;
+        state.soqlLibrary = await deleteSavedSoql(currentOrgKey(), row.id);
+        if (state.editingSoqlId === row.id) state.editingSoqlId = null;
+        renderSoqlLibrary();
+      })
+    );
+    item.appendChild(main);
+    item.appendChild(actions);
+    root.appendChild(item);
+  }
+}
+
+async function onSaveSoqlToLibrary() {
+  const status = $("#soqlQueryStatus");
+  try {
+    const name = ($("#soqlSaveName").value || "").trim() || guessSoqlName($("#soqlInput").value);
+    state.soqlLibrary = await saveSoqlEntry(currentOrgKey(), {
+      id: state.editingSoqlId,
+      name,
+      soql: $("#soqlInput").value
+    });
+    $("#soqlSaveName").value = name;
+    const match = state.soqlLibrary.find((r) => r.name === name && r.soql === String($("#soqlInput").value).trim());
+    state.editingSoqlId = match?.id || state.editingSoqlId;
+    renderSoqlLibrary();
+    if (status) status.textContent = `Saved “${name}” to library.`;
+  } catch (e) {
+    if (status) status.textContent = e.message;
+  }
+}
+
+function guessSoqlName(soql) {
+  const m = String(soql || "").match(/\bFROM\s+([A-Za-z][A-Za-z0-9_]*)/i);
+  return m ? `${m[1]} query` : `Query ${new Date().toLocaleString()}`;
+}
+
+async function onRunAnonApex() {
+  const box = $("#anonApexResult");
+  const debug = $("#anonApexDebug");
+  box.innerHTML = `<div class="summary-bar">Executing…</div>`;
+  debug.textContent = "";
+  try {
+    const res = await send("executeAnonymous", {
+      tabUrl: await requireTabUrl(),
+      apex: $("#anonApexInput").value,
+      apiVersion: apiVersion()
+    });
+    if (!res.ok) throw new Error(res.error);
+    const summary = summarizeExecuteAnonymous(res.result);
+    box.innerHTML = `<div class="finding ${summary.ok ? "info" : "high"}">
+      <span class="tag">${summary.ok ? "success" : "failed"}</span>
+      <strong>${escapeHtml(summary.summary)}</strong>
+      <p>${escapeHtml(summary.detail || "")}</p>
+    </div>
+    <div class="finding info"><strong>Raw</strong><pre class="inline-pre">${escapeHtml(
+      JSON.stringify(res.result, null, 2)
+    )}</pre></div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="finding high"><span class="tag">error</span><strong>${escapeHtml(
+      e.message
+    )}</strong></div>`;
+  }
+}
+
+async function onFetchAnonDebug() {
+  const debug = $("#anonApexDebug");
+  const box = $("#anonApexResult");
+  debug.textContent = "Fetching latest Apex log…";
+  try {
+    const res = await send("fetchLatestApexDebug", {
+      tabUrl: await requireTabUrl(),
+      apiVersion: apiVersion()
+    });
+    if (!res.ok) throw new Error(res.error);
+    const extracted = extractDebugOutput(res.result.body);
+    const header = `Log ${res.result.logId} · ${res.result.startTime || ""} · ${extracted.debugCount} USER_DEBUG`;
+    debug.textContent = extracted.preview
+      ? `${header}\n\n${extracted.preview}`
+      : `${header}\n\nNo USER_DEBUG / FATAL_ERROR lines found in the latest log.\n\n${String(res.result.body || "").slice(0, 2000)}`;
+    if (box && !box.innerHTML.includes("finding")) {
+      box.innerHTML = `<div class="summary-bar">${escapeHtml(header)}</div>`;
+    }
+  } catch (e) {
+    debug.textContent = e.message;
+  }
 }
 
 function setOrgBanner(org, session) {
@@ -432,7 +654,11 @@ function apiVersion() {
   return $("#apiVersion")?.value || DEFAULT_API_VERSION;
 }
 
-function requireTabUrl() {
+async function requireTabUrl() {
+  if (state.tab?.url && isSalesforceUrl(state.tab.url)) {
+    return state.tab.url;
+  }
+  await refreshOrg();
   if (!state.tab?.url || !isSalesforceUrl(state.tab.url)) {
     throw new Error("Open a logged-in Salesforce tab first.");
   }
@@ -463,7 +689,7 @@ async function onRunGenSoql() {
   clearQueryResult(panel, status, "nl", "Running…");
   try {
     const res = await send("runSoql", {
-      tabUrl: requireTabUrl(),
+      tabUrl: await requireTabUrl(),
       query: state.lastGenSoql,
       apiVersion: apiVersion()
     });
@@ -477,7 +703,7 @@ async function onRunGenSoql() {
 async function onLoadFlows() {
   $("#flowOut").innerHTML = `<div class="summary-bar">Loading flows…</div>`;
   try {
-    const res = await send("listFlows", { tabUrl: requireTabUrl(), apiVersion: apiVersion() });
+    const res = await send("listFlows", { tabUrl: await requireTabUrl(), apiVersion: apiVersion() });
     if (!res.ok) throw new Error(res.error);
     const report = analyzeFlow(res.result);
     renderFlowReport(report);
@@ -613,7 +839,7 @@ function renderDeployChecklist() {
 async function refreshDeploySignals() {
   $("#deploySignals").textContent = "Checking org…";
   try {
-    const tabUrl = requireTabUrl();
+    const tabUrl = await requireTabUrl();
     const [cov, fails] = await Promise.all([
       send("getApexCoverage", { tabUrl, apiVersion: apiVersion() }),
       send("getRecentDeployFailures", { tabUrl, apiVersion: apiVersion() })
@@ -666,7 +892,7 @@ async function onInvestigatePerms() {
   }
   $("#permOut").innerHTML = `<div class="summary-bar">Investigating…</div>`;
   try {
-    const tabUrl = requireTabUrl();
+    const tabUrl = await requireTabUrl();
     const qs = buildPermissionQueries(userKey, objectApiName);
     const userRes = await send("runSoql", { tabUrl, query: qs.user, apiVersion: apiVersion() });
     if (!userRes.ok) throw new Error(userRes.error);
@@ -750,7 +976,7 @@ function fillPackageTypeSelect() {
 
 async function preloadGlobalObjects() {
   try {
-    const res = await send("describeGlobal", { tabUrl: requireTabUrl(), apiVersion: apiVersion() });
+    const res = await send("describeGlobal", { tabUrl: await requireTabUrl(), apiVersion: apiVersion() });
     if (!res.ok) return;
     const names = (res.result.sobjects || []).map((s) => s.name).sort();
     state.globalObjects = names;
@@ -776,7 +1002,7 @@ async function onLoadDescribe() {
   $("#describeDependent").innerHTML = "";
   try {
     const res = await send("describeSObject", {
-      tabUrl: requireTabUrl(),
+      tabUrl: await requireTabUrl(),
       sobject,
       apiVersion: apiVersion()
     });
@@ -907,7 +1133,7 @@ async function onSearchMeta() {
   $("#metaResults").innerHTML = `<div class="summary-bar">Searching…</div>`;
   try {
     const res = await send("searchMetadata", {
-      tabUrl: requireTabUrl(),
+      tabUrl: await requireTabUrl(),
       query,
       typeId,
       apiVersion: apiVersion()
@@ -948,7 +1174,7 @@ async function onLoadPackageMembers() {
   $("#packageMembers").innerHTML = `<div class="hint">Loading…</div>`;
   try {
     const res = await send("listPackageTypeMembers", {
-      tabUrl: requireTabUrl(),
+      tabUrl: await requireTabUrl(),
       typeName,
       apiVersion: apiVersion()
     });
@@ -1028,7 +1254,7 @@ async function onLoadInactiveFlows(scanField) {
   try {
     const needle = buildFieldReferenceHint($("#flowCleanObject").value, $("#flowCleanField").value);
     const res = await send("listInactiveFlowVersions", {
-      tabUrl: requireTabUrl(),
+      tabUrl: await requireTabUrl(),
       // Only apply field needle when scanning; otherwise use the list filter box only.
       needle: scanField ? needle : "",
       includeMetadata: Boolean(scanField && needle),
@@ -1104,7 +1330,7 @@ async function onDeleteInactiveFlows() {
   $("#flowCleanStatus").textContent = "Deleting…";
   try {
     const res = await send("deleteFlowVersions", {
-      tabUrl: requireTabUrl(),
+      tabUrl: await requireTabUrl(),
       ids: state.inactiveFlowSelected,
       apiVersion: apiVersion()
     });
@@ -1182,7 +1408,7 @@ async function runSoqlManual() {
   clearQueryResult(panel, status, "soql", "Running…");
   try {
     const res = await send("runSoql", {
-      tabUrl: requireTabUrl(),
+      tabUrl: await requireTabUrl(),
       query: $("#soqlInput").value,
       apiVersion: apiVersion()
     });

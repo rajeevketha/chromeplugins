@@ -1997,15 +1997,13 @@ async function onSoqlApiModeChange() {
   if (hint) {
     hint.textContent =
       state.soqlAssist.mode === "tooling"
-        ? "Tooling mode: query ApexClass, ApexTrigger, Flow, CustomObject, EntityDefinition, etc. Field autocomplete uses Tooling describe."
-        : "Standard mode: query Account, Case, custom objects, etc. Type field API names in SELECT — pick a suggestion to insert FieldName,";
+        ? "Tooling API — suggestions use tooling objects and fields."
+        : "Standard API — suggestions use org objects and fields.";
   }
   const obj = $("#soqlObjectHint");
   if (obj) {
     obj.placeholder =
-      state.soqlAssist.mode === "tooling"
-        ? "Tooling object (ApexClass, Flow, CustomField…)"
-        : "Object API name (Account, Case, MyObj__c)";
+      state.soqlAssist.mode === "tooling" ? "Object API name" : "Object API name";
   }
   await ensureSoqlObjectList(true);
   await ensureSoqlFieldsForActiveObject(true);

@@ -255,10 +255,7 @@
       <datalist id="soqlObjectList"></datalist>
       <button type="button" class="btn" id="soqlLoadFields" title="Load fields for autocomplete">Load fields</button>
     </div>
-    <p class="hint" id="soqlAssistHint">
-      Type in SELECT to autocomplete field API names. Choosing a field inserts <code>FieldName,</code> so you can keep adding.
-      Switch to Tooling API for ApexClass, Flow, CustomObject, etc.
-    </p>
+    <p class="hint" id="soqlAssistHint">Field suggestions appear as you type. Choose Standard or Tooling for the object API.</p>
     <label class="label" for="soqlInput">SOQL</label>
     <div class="soql-editor">
       <textarea id="soqlInput" class="textarea" rows="5" placeholder="SELECT Id, Name FROM Account LIMIT 10" spellcheck="false"></textarea>

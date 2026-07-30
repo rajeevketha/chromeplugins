@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "OrgKit",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Salesforce developer toolkit: SOQL, schema, Apex, flows. Uses your open org tab session in-browser only.",
   "icons": {
     "16": "icons/icon16.png",
@@ -58,14 +58,21 @@
         "https://*.salesforce-setup.com/*",
         "https://*.visualforce.com/*"
       ],
-      "js": ["content/content.js"],
-      "css": ["content/content.css"],
+      "js": [
+        "content/content.js"
+      ],
+      "css": [
+        "content/content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/*", "popup/popup.html"],
+      "resources": [
+        "icons/*",
+        "popup/popup.html"
+      ],
       "matches": [
         "https://*.salesforce.com/*",
         "https://*.force.com/*",

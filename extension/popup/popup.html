@@ -63,9 +63,9 @@
       </select>
     </div>
     <label class="label" for="nlInput">Describe the data you need</label>
-    <textarea id="nlInput" class="textarea" rows="3" placeholder="Show open Cases created this week"></textarea>
+    <textarea id="nlInput" class="textarea" rows="3" placeholder="Show recent records for an object"></textarea>
     <p class="hint">
-      Standard mode includes custom objects and custom metadata (__mdt). Tooling mode matches ApexClass, FlowDefinition, Flow versions, CustomObject, and other Tooling entities. Results respect your Salesforce permissions.
+      Works with standard objects, custom objects (__c), and custom metadata (__mdt). Tooling mode matches ApexClass, FlowDefinition, Flow versions, and other Tooling entities. Results respect your Salesforce permissions.
     </p>
     <div class="row">
       <button type="button" class="btn primary" id="genSoql">Generate SOQL</button>
@@ -104,7 +104,7 @@
     </div>
     <div id="orgLimitsOut" class="report"></div>
     <label class="label" for="govInput">Paste Apex (or describe the transaction)</label>
-    <textarea id="govInput" class="textarea" rows="8" placeholder="for (Account a : accounts) {&#10;  List&lt;Contact&gt; c = [SELECT Id FROM Contact WHERE AccountId = :a.Id];&#10;}"></textarea>
+    <textarea id="govInput" class="textarea" rows="8" placeholder="for (SObject record : records) {&#10;  List&lt;SObject&gt; related = [SELECT Id FROM Related__c WHERE ParentId__c = :record.Id];&#10;}"></textarea>
     <button type="button" class="btn primary block" id="runGovernor">Predict code limits</button>
     <div id="govOut" class="report"></div>
   </section>
@@ -131,7 +131,7 @@
   <!-- FEATURE: Formula -->
   <section id="view-formula" class="view">
     <label class="label" for="formulaInput">Describe the formula</label>
-    <textarea id="formulaInput" class="textarea" rows="3" placeholder="Checkbox true when Priority is High or Status is Escalated"></textarea>
+    <textarea id="formulaInput" class="textarea" rows="3" placeholder="Checkbox true when status is open or priority is high"></textarea>
     <div class="row">
       <button type="button" class="btn primary" id="buildFormula">Build</button>
       <button type="button" class="btn" id="copyFormula">Copy</button>
@@ -140,23 +140,14 @@
     <div id="formulaHelpers" class="helpers"></div>
   </section>
 
-  <!-- FEATURE: Deployment -->
-  <section id="view-deploy" class="view">
-    <div class="row">
-      <button type="button" class="btn primary" id="refreshDeploySignals">Check org signals</button>
-      <button type="button" class="btn" id="assessDeploy">Assess</button>
-    </div>
-    <div id="deploySignals" class="hint"></div>
-    <div id="deployChecklist" class="checklist"></div>
-    <div id="deployOut" class="report"></div>
-  </section>
-
   <!-- FEATURE: Permissions -->
   <section id="view-perms" class="view">
     <label class="label" for="permUser">Username or User Id</label>
-    <input id="permUser" class="input" placeholder="user@company.com" />
+    <input id="permUser" class="input" placeholder="user@example.com" />
     <label class="label" for="permObject">Object API name</label>
-    <input id="permObject" class="input" placeholder="Account" value="Account" />
+    <input id="permObject" class="input" list="permObjectList" placeholder="Standard or custom object API name" autocomplete="off" />
+    <datalist id="permObjectList"></datalist>
+    <p class="hint">Supports standard and custom objects (__c). Type to search the org object list.</p>
     <button type="button" class="btn primary block" id="investigatePerms">Investigate</button>
     <div id="permOut" class="report"></div>
   </section>
@@ -178,11 +169,15 @@
 
   <!-- FEATURE: Describe Browser -->
   <section id="view-describe" class="view">
-    <div class="row">
-      <input type="search" id="describeObjectSearch" class="input grow" list="describeObjectList" placeholder="Object API name (Account, Case, MyObj__c)" />
+    <div class="row" style="position:relative">
+      <div class="soql-editor grow" style="flex:1;min-width:0">
+        <input type="search" id="describeObjectSearch" class="input grow" list="describeObjectList" placeholder="Search standard or custom object…" autocomplete="off" style="width:100%" />
+        <div id="describeObjectSuggest" class="soql-suggest hidden" role="listbox" aria-label="Object suggestions"></div>
+      </div>
       <button type="button" class="btn primary" id="loadDescribe">Describe</button>
     </div>
     <datalist id="describeObjectList"></datalist>
+    <p class="hint" id="describeObjectHint">Loads all org objects (including custom __c / __mdt). Search by API name or label.</p>
     <input type="search" id="describeFieldFilter" class="input" placeholder="Filter fields…" style="margin-top:8px" />
     <div id="describeSummary" class="hint"></div>
     <div id="describeFields" class="describe-list"></div>
@@ -196,7 +191,7 @@
     <select id="metaType" class="select block-select"></select>
     <label class="label" for="metaQuery">Search name</label>
     <div class="row">
-      <input type="search" id="metaQuery" class="input grow" placeholder="AccountTrigger, My_Flow, OrderService…" />
+      <input type="search" id="metaQuery" class="input grow" placeholder="Class, flow, LWC, or other metadata name…" />
       <button type="button" class="btn primary" id="searchMeta">Search</button>
     </div>
     <div id="metaResults" class="report"></div>
@@ -229,9 +224,9 @@
       <strong>Active versions are never deleted.</strong>
     </p>
     <label class="label" for="flowCleanObject">Object API (optional)</label>
-    <input id="flowCleanObject" class="input" placeholder="SAP_Product__c" />
+    <input id="flowCleanObject" class="input" placeholder="MyObject__c" />
     <label class="label" for="flowCleanField">Field API name to find in flows (optional)</label>
-    <input id="flowCleanField" class="input" placeholder="Child__c or SAP_Product__c.Child__c" />
+    <input id="flowCleanField" class="input" placeholder="My_Field__c or MyObject__c.My_Field__c" />
     <div class="row wrap">
       <button type="button" class="btn primary" id="loadInactiveFlows">Load inactive versions</button>
       <button type="button" class="btn" id="scanFlowFieldRefs">Load + scan field refs</button>
@@ -272,10 +267,10 @@
       <datalist id="soqlObjectList"></datalist>
       <button type="button" class="btn" id="soqlLoadFields" title="Load fields for autocomplete">Load fields</button>
     </div>
-    <p class="hint" id="soqlAssistHint">Field suggestions appear as you type. Choose Standard or Tooling for the object API. Custom metadata (__mdt) uses Standard.</p>
+    <p class="hint" id="soqlAssistHint">Field suggestions appear as you type. Standard mode includes custom objects (__c) and custom metadata (__mdt). Use Tooling for metadata entities.</p>
     <label class="label" for="soqlInput">SOQL</label>
     <div class="soql-editor">
-      <textarea id="soqlInput" class="textarea" rows="5" placeholder="SELECT Id, Name FROM Account LIMIT 10" spellcheck="false"></textarea>
+      <textarea id="soqlInput" class="textarea" rows="5" placeholder="SELECT Id, Name FROM MyObject__c LIMIT 10" spellcheck="false"></textarea>
       <div id="soqlSuggest" class="soql-suggest hidden" role="listbox" aria-label="Field suggestions"></div>
     </div>
     <div class="row wrap">
@@ -284,7 +279,7 @@
       <button type="button" class="btn" id="saveSoqlBtn">Save to library</button>
     </div>
     <div class="row wrap">
-      <input type="text" id="soqlSaveName" class="input grow" placeholder="Name for saved query (e.g. Open Cases)" maxlength="80" />
+      <input type="text" id="soqlSaveName" class="input grow" placeholder="Name for saved query" maxlength="80" />
     </div>
     <div id="soqlQueryPanel" class="query-panel hidden" data-query-panel="soql">
       <div class="query-toolbar">

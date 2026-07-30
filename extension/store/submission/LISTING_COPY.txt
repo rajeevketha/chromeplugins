@@ -30,7 +30,8 @@ What it does
 • Describe browser (fields + dependent picklists), metadata quick open, package.xml builder
 • Inactive flow version cleaner (Active versions are never deleted)
 • NL→SOQL (works offline; optional AI if you add your own API key)
-• Apex review, governor heuristics, error/log helpers, deploy checklist, permission investigator
+• Apex review, governor heuristics, error/log helpers, permission investigator
+• Standard and custom objects (__c) / custom metadata (__mdt) supported in Describe, SOQL, and NL→SOQL
 
 How authentication works
 OrgKit does not ask you to type a password into the extension. It uses the Salesforce session cookie from a Salesforce tab you already logged into in Chrome, only to call Salesforce APIs for actions you start. The session stays in your browser.

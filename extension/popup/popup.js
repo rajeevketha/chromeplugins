@@ -13,7 +13,6 @@ import { summarizeOrgLimits } from "../lib/org-limits.js";
 import { decodeError, decodeErrorWithAi } from "../lib/error-decoder.js";
 import { analyzeDebugLog } from "../lib/debug-log.js";
 import { buildFormula, FORMULA_HELPERS } from "../lib/formula-builder.js";
-import { DEPLOY_CHECKLIST, assessDeploymentReadiness } from "../lib/deployment.js";
 import { analyzePermissions, buildPermissionQueries } from "../lib/permissions.js";
 import { reviewApex } from "../lib/apex-review.js";
 import { aiComplete } from "../lib/ai.js";
@@ -63,21 +62,20 @@ import {
 } from "../lib/anonymous-apex.js";
 
 const FEATURES = [
-  { id: "soql-run", title: "SOQL Runner", blurb: "Autocomplete, All data edit, Tooling" },
-  { id: "anon-apex", title: "Anonymous Apex", blurb: "Execute + pull debug output" },
-  { id: "describe", title: "Describe Browser", blurb: "Fields, picklists, dependencies" },
-  { id: "meta-open", title: "Metadata Quick Open", blurb: "Jump to class, flow, LWC…" },
-  { id: "package", title: "Package.xml Builder", blurb: "Multi-select → package.xml" },
-  { id: "flow-clean", title: "Inactive Flow Cleaner", blurb: "Delete versions blocking fields" },
-  { id: "nl-soql", title: "NL → SOQL", blurb: "Standard, CMDT, Tooling + optional AI" },
-  { id: "flow", title: "Flow Analyzer", blurb: "Spot DML-in-loop & fault gaps" },
-  { id: "governor", title: "Governor Predictor", blurb: "Estimate limit risk in Apex" },
-  { id: "errors", title: "Error Decoder", blurb: "Explain Salesforce exceptions" },
-  { id: "logs", title: "Debug Log Analyzer", blurb: "Limits, SOQL, exceptions" },
-  { id: "formula", title: "Formula Builder", blurb: "AI / template formulas" },
-  { id: "deploy", title: "Deploy Readiness", blurb: "Checklist + org signals" },
-  { id: "perms", title: "Permission Investigator", blurb: "User CRUD / FLS view" },
-  { id: "apex", title: "Apex Review", blurb: "Security & bulkification scan" }
+  { id: "soql-run", title: "SOQL Runner", blurb: "Query standard & custom objects" },
+  { id: "anon-apex", title: "Anonymous Apex", blurb: "Run Apex and view debug output" },
+  { id: "describe", title: "Describe Browser", blurb: "Fields & dependencies for any object" },
+  { id: "meta-open", title: "Metadata Quick Open", blurb: "Open classes, flows, LWCs, and more" },
+  { id: "package", title: "Package.xml Builder", blurb: "Build package.xml from selected members" },
+  { id: "flow-clean", title: "Inactive Flow Cleaner", blurb: "Remove inactive versions safely" },
+  { id: "nl-soql", title: "NL → SOQL", blurb: "Plain English to SOQL / Tooling" },
+  { id: "flow", title: "Flow Analyzer", blurb: "Find DML-in-loop and fault gaps" },
+  { id: "governor", title: "Governor Predictor", blurb: "Estimate Apex limit risk" },
+  { id: "errors", title: "Error Decoder", blurb: "Explain Salesforce errors" },
+  { id: "logs", title: "Debug Log Analyzer", blurb: "Limits, SOQL, and exceptions" },
+  { id: "formula", title: "Formula Builder", blurb: "Build field formulas from a description" },
+  { id: "perms", title: "Permission Investigator", blurb: "User CRUD / FLS on any object" },
+  { id: "apex", title: "Apex Review", blurb: "Security and bulkification checks" }
 ];
 
 const TITLES = {
@@ -92,7 +90,6 @@ const TITLES = {
   errors: "Error Decoder",
   logs: "Debug Log Analyzer",
   formula: "Formula Builder",
-  deploy: "Deploy Readiness",
   perms: "Permission Investigator",
   apex: "Apex Review",
   links: "Setup Links",
@@ -135,8 +132,7 @@ const state = {
   lastGenApiMode: "rest",
   toolingObjects: null,
   lastFormula: "",
-  deployChecked: [],
-  deploySignals: {},
+  describeObjects: [],
   describe: null,
   describeFields: [],
   packageSelections: [],
@@ -183,7 +179,7 @@ async function init() {
   renderLinks();
   renderFormulaHelpers();
   await loadFavorites();
-  await loadDeployChecklist();
+  bindDescribeObjectSearch();
   await refreshOrg();
   await refreshSoqlLibrary();
   const deepView = new URLSearchParams(location.search).get("view");
@@ -233,7 +229,7 @@ function showView(id) {
   if (el) el.classList.add("active");
   $("#headerTitle").textContent = TITLES[id] || "OrgKit";
   $("#backBtn").classList.toggle("hidden", id === "home");
-  if (id === "describe" && !state.globalObjects) {
+  if (id === "describe" || id === "perms") {
     preloadGlobalObjects().catch(() => {});
   }
   if (id === "soql-run") {
@@ -277,9 +273,6 @@ function bindFeatureActions() {
   $("#copyFormula").addEventListener("click", async () => {
     if (state.lastFormula) await navigator.clipboard.writeText(state.lastFormula);
   });
-
-  $("#refreshDeploySignals").addEventListener("click", refreshDeploySignals);
-  $("#assessDeploy").addEventListener("click", assessDeploy);
 
   $("#investigatePerms").addEventListener("click", onInvestigatePerms);
   $("#reviewApex").addEventListener("click", onReviewApex);
@@ -1251,72 +1244,6 @@ function renderFormulaHelpers() {
   ).join("");
 }
 
-async function loadDeployChecklist() {
-  const data = await chrome.storage.sync.get({ deployChecklist: [] });
-  state.deployChecked = data.deployChecklist || [];
-  renderDeployChecklist();
-}
-
-function renderDeployChecklist() {
-  const root = $("#deployChecklist");
-  root.innerHTML = DEPLOY_CHECKLIST.map((c) => {
-    const checked = state.deployChecked.includes(c.id) ? "checked" : "";
-    return `<label><input type="checkbox" data-check="${c.id}" ${checked} /> <span>${escapeHtml(c.label)} <em style="color:var(--muted)">(${c.severity})</em></span></label>`;
-  }).join("");
-  root.querySelectorAll("input[data-check]").forEach((input) => {
-    input.addEventListener("change", async () => {
-      const id = input.getAttribute("data-check");
-      if (input.checked) state.deployChecked.push(id);
-      else state.deployChecked = state.deployChecked.filter((x) => x !== id);
-      state.deployChecked = [...new Set(state.deployChecked)];
-      await chrome.storage.sync.set({ deployChecklist: state.deployChecked });
-    });
-  });
-}
-
-async function refreshDeploySignals() {
-  $("#deploySignals").textContent = "Checking org…";
-  try {
-    const tabUrl = await requireTabUrl();
-    const [cov, fails] = await Promise.all([
-      send("getApexCoverage", { tabUrl, apiVersion: apiVersion() }),
-      send("getRecentDeployFailures", { tabUrl, apiVersion: apiVersion() })
-    ]);
-    state.deploySignals = {
-      coveragePercent: cov.ok ? cov.result.coveragePercent : null,
-      recentDeployFailures: fails.ok ? fails.result.count : 0,
-      isProduction: state.org ? !state.org.isSandbox && !state.org.isDevEd : false,
-      coverageError: cov.ok ? cov.result.error : cov.error
-    };
-    const parts = [];
-    if (state.deploySignals.coveragePercent != null) {
-      parts.push(`Coverage ~${state.deploySignals.coveragePercent}%`);
-    } else {
-      parts.push(`Coverage unavailable${state.deploySignals.coverageError ? `: ${state.deploySignals.coverageError}` : ""}`);
-    }
-    parts.push(`Failed deploys: ${state.deploySignals.recentDeployFailures}`);
-    const envText = state.org?.isSandbox
-      ? "Environment: Sandbox"
-      : state.org?.isDevEd
-        ? "Environment: Developer Edition"
-        : "Environment: Production";
-    parts.push(envText);
-    $("#deploySignals").textContent = parts.join(" · ");
-  } catch (e) {
-    $("#deploySignals").textContent = e.message;
-  }
-}
-
-function assessDeploy() {
-  const report = assessDeploymentReadiness(state.deployChecked, state.deploySignals);
-  const findings = report.findings
-    .map(
-      (f) => `<div class="finding ${f.severity}"><span class="tag">${f.severity}</span><strong>${escapeHtml(f.title)}</strong><p>${escapeHtml(f.detail)}</p></div>`
-    )
-    .join("");
-  $("#deployOut").innerHTML = `<div class="summary-bar">${escapeHtml(report.summary)}</div>${findings}`;
-}
-
 async function onInvestigatePerms() {
   const userKey = $("#permUser").value.trim();
   const objectApiName = $("#permObject").value.trim();
@@ -1538,27 +1465,125 @@ async function preloadGlobalObjects() {
     const sobjects = res.result.sobjects || [];
     state.globalObjects = sobjects;
     fillDescribeObjectDatalist(sobjects);
+    fillPermObjectDatalist(sobjects);
   } catch {
     /* optional */
   }
 }
 
+function normalizeDescribeObjects(sobjects) {
+  return (sobjects || [])
+    .map((s) => {
+      if (typeof s === "string") return { name: s, label: s, custom: /__c$|__mdt$/i.test(s) };
+      if (!s?.name) return null;
+      return {
+        name: s.name,
+        label: s.label || s.name,
+        labelPlural: s.labelPlural || s.pluralLabel || "",
+        custom: !!s.custom || /__c$|__mdt$|__e$|__b$|__x$/i.test(s.name)
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function fillDescribeObjectDatalist(sobjects) {
+  state.describeObjects = normalizeDescribeObjects(sobjects);
   const list = $("#describeObjectList");
   if (!list) return;
-  const names = (sobjects || [])
-    .map((s) => (typeof s === "string" ? s : s.name))
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b));
-  list.innerHTML = names
-    .slice(0, 500)
-    .map((n) => `<option value="${escapeHtml(n)}"></option>`)
+  // Include every standard + custom object (no 500 cap) so custom APIs are searchable.
+  list.innerHTML = state.describeObjects
+    .map((o) => `<option value="${escapeHtml(o.name)}" label="${escapeHtml(o.label)}"></option>`)
     .join("");
+  const summary = $("#describeObjectHint");
+  if (summary) {
+    const customCount = state.describeObjects.filter((o) => o.custom).length;
+    summary.textContent = `${state.describeObjects.length} objects loaded (${customCount} custom) — search by API name or label.`;
+  }
+}
+
+function fillPermObjectDatalist(sobjects) {
+  const list = $("#permObjectList");
+  if (!list) return;
+  const objects = normalizeDescribeObjects(sobjects);
+  list.innerHTML = objects
+    .map((o) => `<option value="${escapeHtml(o.name)}" label="${escapeHtml(o.label)}"></option>`)
+    .join("");
+}
+
+function bindDescribeObjectSearch() {
+  const input = $("#describeObjectSearch");
+  const host = $("#describeObjectSuggest");
+  if (!input || !host) return;
+  const paint = () => renderDescribeObjectSuggest();
+  input.addEventListener("input", paint);
+  input.addEventListener("focus", paint);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") hideDescribeObjectSuggest();
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest?.("#describeObjectSearch") && !e.target.closest?.("#describeObjectSuggest")) {
+      hideDescribeObjectSuggest();
+    }
+  });
+}
+
+function hideDescribeObjectSuggest() {
+  const host = $("#describeObjectSuggest");
+  if (!host) return;
+  host.classList.add("hidden");
+  host.replaceChildren();
+}
+
+function renderDescribeObjectSuggest() {
+  const input = $("#describeObjectSearch");
+  const host = $("#describeObjectSuggest");
+  if (!input || !host) return;
+  const q = (input.value || "").trim().toLowerCase();
+  if (!q || !state.describeObjects.length) {
+    hideDescribeObjectSuggest();
+    return;
+  }
+  const scored = [];
+  for (const o of state.describeObjects) {
+    const name = o.name.toLowerCase();
+    const label = (o.label || "").toLowerCase();
+    const plural = (o.labelPlural || "").toLowerCase();
+    let score = 0;
+    if (name === q || label === q) score = 100;
+    else if (name.startsWith(q) || label.startsWith(q)) score = 90;
+    else if (name.includes(q) || label.includes(q) || plural.includes(q)) score = 70;
+    else continue;
+    if (o.custom) score += 5;
+    scored.push({ o, score });
+  }
+  scored.sort((a, b) => b.score - a.score || a.o.name.localeCompare(b.o.name));
+  const hits = scored.slice(0, 50).map((x) => x.o);
+  if (!hits.length) {
+    hideDescribeObjectSuggest();
+    return;
+  }
+  host.classList.remove("hidden");
+  host.replaceChildren();
+  for (const o of hits) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "soql-suggest-item";
+    btn.innerHTML = `<strong>${escapeHtml(o.name)}</strong><span>${escapeHtml(o.label)}${o.custom ? " · custom" : ""}</span>`;
+    btn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      input.value = o.name;
+      hideDescribeObjectSuggest();
+      onLoadDescribe();
+    });
+    host.appendChild(btn);
+  }
 }
 
 async function onLoadDescribe() {
   const sobject = $("#describeObjectSearch").value.trim();
   if (!sobject) return;
+  hideDescribeObjectSuggest();
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(sobject)) {
     $("#describeSummary").textContent = "Invalid object API name.";
     return;
@@ -1577,7 +1602,8 @@ async function onLoadDescribe() {
     const fields = (res.result.fields || []).map(summarizeField);
     state.describe = res.result;
     state.describeFields = fields;
-    $("#describeSummary").textContent = `${res.result.name} · ${fields.length} fields · keyPrefix ${res.result.keyPrefix || "—"}`;
+    const customBit = res.result.custom ? " · custom" : "";
+    $("#describeSummary").textContent = `${res.result.name}${customBit} · ${fields.length} fields · keyPrefix ${res.result.keyPrefix || "—"}`;
     renderDescribeFields();
     renderDependentPicker(fields);
   } catch (e) {

@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Snoozer",
+  "version": "1.0.0",
+  "description": "Snooze a tab for later — 1 hour, tonight, or tomorrow morning — and get it back when you asked.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    },
+    "default_title": "Tab Snoozer"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "tabs",
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+  "commands": {
+    "snooze-1-hour": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "Snooze current tab for 1 hour"
+    }
+  }
+}

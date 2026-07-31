@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tab Snoozer</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="brand">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div>
+          <h1>Tab Snoozer</h1>
+          <p class="tagline">Park it now. Get it back later.</p>
+        </div>
+      </header>
+
+      <section class="snooze" aria-label="Snooze current tab">
+        <p class="section-label">Snooze this tab</p>
+        <div class="preset-row">
+          <button type="button" class="preset" data-preset="1h">1 hour</button>
+          <button type="button" class="preset" data-preset="tonight">Tonight</button>
+          <button type="button" class="preset" data-preset="tomorrow">Tomorrow morning</button>
+        </div>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="list-section" aria-label="Snoozed tabs">
+        <div class="list-head">
+          <p class="section-label">Snoozed</p>
+          <span id="count" class="count">0</span>
+        </div>
+        <ul id="list" class="list"></ul>
+        <p id="empty" class="empty">Nothing snoozed yet. Pick a time above.</p>
+      </section>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

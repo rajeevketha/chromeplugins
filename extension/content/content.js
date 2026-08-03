@@ -18,6 +18,16 @@
     "800": "Contract"
   };
 
+  const EDGE = {
+    /** Prefer slightly below mid — many Salesforce edge tools sit near center. */
+    preferredRatio: 0.58,
+    gap: 10,
+    sampleStep: 14,
+    maxTabWidth: 96,
+    edgePad: 18,
+    margin: 12
+  };
+
   const state = {
     showLauncher: true,
     showBadge: true,
@@ -26,7 +36,11 @@
     panel: null,
     restoreTab: null,
     badge: null,
-    open: false
+    open: false,
+    edgeTopPx: null,
+    edgeWatch: null,
+    edgeResizeTimer: 0,
+    edgeMutTimer: 0
   };
 
   init();
@@ -43,6 +57,7 @@
 
     if (state.showBadge) mountBadge();
     if (state.showLauncher) mountLauncher();
+    startEdgeWatch();
 
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "sync") return;
@@ -124,6 +139,157 @@
     state.open = false;
   }
 
+  function isOrgKitEdgeNode(el) {
+    if (!el || el.nodeType !== 1) return false;
+    const id = el.id || "";
+    return (
+      id === "orgkit-side-tab" ||
+      id === "orgkit-side-panel" ||
+      id === "orgkit-restore-tab" ||
+      id === "orgkit-badge" ||
+      id === "orgkit-id-tip"
+    );
+  }
+
+  /** Other extensions often park slim fixed tabs on the right edge — find their Y ranges. */
+  function collectRightEdgeOccupancy(excludeEl) {
+    const vh = window.innerHeight || 800;
+    const vw = window.innerWidth || 1200;
+    const x = Math.max(0, vw - 3);
+    const ranges = [];
+    const seen = new Set();
+
+    for (let y = 0; y < vh; y += EDGE.sampleStep) {
+      let els;
+      try {
+        els = document.elementsFromPoint(x, y);
+      } catch {
+        continue;
+      }
+      for (const el of els) {
+        if (!el || el === document.documentElement || el === document.body) continue;
+        if (el === excludeEl || isOrgKitEdgeNode(el) || excludeEl?.contains?.(el)) continue;
+        if (seen.has(el)) continue;
+        const style = window.getComputedStyle(el);
+        if (style.position !== "fixed" && style.position !== "sticky") continue;
+        if (style.visibility === "hidden" || style.display === "none") continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.height < 24 || rect.width < 8 || rect.width > EDGE.maxTabWidth) continue;
+        if (rect.right < vw - EDGE.edgePad) continue;
+        if (rect.left < vw - EDGE.maxTabWidth - 24) continue;
+        seen.add(el);
+        ranges.push({
+          top: rect.top - EDGE.gap,
+          bottom: rect.bottom + EDGE.gap
+        });
+        break;
+      }
+    }
+
+    ranges.sort((a, b) => a.top - b.top);
+    const merged = [];
+    for (const r of ranges) {
+      const last = merged[merged.length - 1];
+      if (!last || r.top > last.bottom) merged.push({ ...r });
+      else last.bottom = Math.max(last.bottom, r.bottom);
+    }
+    return merged;
+  }
+
+  function findFreeEdgeTop(tabHeight) {
+    const vh = window.innerHeight || 800;
+    const height = Math.max(40, Math.ceil(tabHeight || 88));
+    const minTop = EDGE.margin;
+    const maxTop = Math.max(minTop, vh - height - EDGE.margin);
+    const preferred = Math.round(vh * EDGE.preferredRatio);
+    const occupied = collectRightEdgeOccupancy(
+      state.launcher || state.restoreTab || state.panel
+    );
+
+    const fits = (top) => {
+      const bottom = top + height;
+      return occupied.every((r) => bottom <= r.top || top >= r.bottom);
+    };
+
+    const clamp = (top) => Math.min(maxTop, Math.max(minTop, top));
+    let candidate = clamp(preferred);
+    if (fits(candidate)) return candidate;
+
+    // Walk down from preferred, then up — keeps OrgKit near mid when possible.
+    for (let top = preferred; top <= maxTop; top += 8) {
+      const t = clamp(top);
+      if (fits(t)) return t;
+    }
+    for (let top = preferred; top >= minTop; top -= 8) {
+      const t = clamp(top);
+      if (fits(t)) return t;
+    }
+
+    // Last resort: place just below the lowest occupied block, or at bottom.
+    if (occupied.length) {
+      const below = clamp(Math.ceil(occupied[occupied.length - 1].bottom));
+      if (fits(below)) return below;
+      const above = clamp(Math.floor(occupied[0].top - height));
+      if (fits(above)) return above;
+    }
+    return clamp(preferred);
+  }
+
+  function applyEdgePosition(topPx) {
+    const px = `${Math.round(topPx)}px`;
+    state.edgeTopPx = Math.round(topPx);
+    for (const el of [state.launcher, state.restoreTab, state.panel]) {
+      if (!el) continue;
+      el.style.setProperty("--orgkit-edge-top", px);
+      el.style.top = px;
+    }
+  }
+
+  function positionEdgeControls() {
+    if (!state.showLauncher) return;
+    const tab = state.launcher || state.restoreTab;
+    if (!tab || !tab.isConnected) return;
+    // Measure after layout; use a sensible fallback before first paint.
+    const rect = tab.getBoundingClientRect();
+    const height = rect.height > 10 ? rect.height : state.minimized ? 64 : 96;
+    const top = findFreeEdgeTop(height);
+    if (state.edgeTopPx != null && Math.abs(state.edgeTopPx - top) < 4) return;
+    applyEdgePosition(top);
+  }
+
+  function startEdgeWatch() {
+    if (state.edgeWatch) return;
+    const onResize = () => {
+      window.clearTimeout(state.edgeResizeTimer);
+      state.edgeResizeTimer = window.setTimeout(() => {
+        state.edgeTopPx = null;
+        positionEdgeControls();
+      }, 120);
+    };
+    window.addEventListener("resize", onResize);
+
+    const obs = new MutationObserver(() => {
+      window.clearTimeout(state.edgeMutTimer);
+      state.edgeMutTimer = window.setTimeout(() => {
+        state.edgeTopPx = null;
+        positionEdgeControls();
+      }, 200);
+    });
+    obs.observe(document.documentElement, { childList: true, subtree: false });
+    if (document.body) obs.observe(document.body, { childList: true, subtree: false });
+
+    state.edgeWatch = { onResize, obs };
+    // Other extensions often inject a moment after us.
+    window.setTimeout(() => {
+      state.edgeTopPx = null;
+      positionEdgeControls();
+    }, 400);
+    window.setTimeout(() => {
+      state.edgeTopPx = null;
+      positionEdgeControls();
+    }, 1500);
+  }
+
   /** Compact right-edge tab (Inspector-style), or a slim Show control when minimized. */
   function mountLauncher() {
     clearLauncher();
@@ -164,6 +330,8 @@
     state.launcher = tab;
     state.panel = panel;
     state.open = false;
+    state.edgeTopPx = null;
+    positionEdgeControls();
   }
 
   function mountRestoreTab() {
@@ -178,6 +346,8 @@
     tab.addEventListener("click", () => setMinimized(false));
     document.documentElement.appendChild(tab);
     state.restoreTab = tab;
+    state.edgeTopPx = null;
+    positionEdgeControls();
   }
 
   async function setMinimized(minimized) {

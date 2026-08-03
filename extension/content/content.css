@@ -18,10 +18,11 @@
 .orgkit-badge.sandbox { background: #dd7a01; }
 .orgkit-badge.deved { background: #0176d3; }
 
-/* Slim right-edge tab — minimal footprint */
+/* Slim right-edge tab — minimal footprint.
+   Vertical position is set in JS (--orgkit-edge-top) to avoid other edge plugins. */
 .orgkit-side-tab {
   position: fixed;
-  top: 42%;
+  top: var(--orgkit-edge-top, 58%);
   right: 0;
   z-index: 2147483646;
   width: 22px;
@@ -65,7 +66,7 @@
 
 .orgkit-side-panel {
   position: fixed;
-  top: 38%;
+  top: var(--orgkit-edge-top, 58%);
   right: 26px;
   z-index: 2147483646;
   display: flex;

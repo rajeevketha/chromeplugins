@@ -1,8 +1,8 @@
-# OrgKit Chrome Web Store submission pack (v1.7.0)
+# OrgKit Chrome Web Store submission pack (v1.7.1)
 
 | Item | File |
 |---|---|
-| Upload zip | `OrgKit-1.7.0-store.zip` |
+| Upload zip | `OrgKit-1.7.1-store.zip` |
 | Checklist | `SUBMIT_CHECKLIST.md` |
 | Listing copy | `LISTING_COPY.txt` |
 | Permission justifications | `PERMISSION_JUSTIFICATIONS.txt` |

@@ -1,6 +1,6 @@
 ================================================================================
 Chrome Web Store — OrgKit listing copy (paste into Developer Dashboard)
-Version covered: 1.7.0
+Version covered: 1.7.1
 ================================================================================
 
 LANGUAGE

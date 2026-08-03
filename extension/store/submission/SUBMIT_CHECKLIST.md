@@ -1,11 +1,11 @@
-# OrgKit — Chrome Web Store submit checklist (v1.7.0)
+# OrgKit — Chrome Web Store submit checklist (v1.7.1)
 
-Use this pack end-to-end. Mirrored in Files as `OrgKit-CWS-1.7.0/`.
+Use this pack end-to-end. Mirrored in Files as `OrgKit-CWS-1.7.1/`.
 
 ## 1. Upload package (required)
 
-- [ ] Upload **`OrgKit-1.7.0-store.zip`** (manifest at zip root)
-- [ ] Confirm version **1.7.0**
+- [ ] Upload **`OrgKit-1.7.1-store.zip`** (manifest at zip root)
+- [ ] Confirm version **1.7.1**
 - [ ] Confirm permissions: **cookies** + **storage** only (+ Salesforce hosts; OpenAI optional)
 - [ ] Confirm UI entry is `app/index.html` (not popup/popup.html)
 

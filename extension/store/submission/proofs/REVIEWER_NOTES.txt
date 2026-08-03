@@ -1,5 +1,5 @@
 ================================================================================
-Notes for Chrome Web Store reviewers — OrgKit 1.7.0
+Notes for Chrome Web Store reviewers — OrgKit 1.7.1
 ================================================================================
 
 Single purpose
@@ -41,3 +41,6 @@ How to test
 
 Destructive actions require confirmation. Active flow versions are never deleted
 by the cleaner. Screenshots use fictional demo org data.
+
+On-page UI
+The slim right-edge OrgKit tab auto-offsets vertically when another fixed edge control already occupies that spot, so both remain usable.

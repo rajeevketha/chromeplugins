@@ -9,14 +9,15 @@
   <body>
     <main class="app">
       <header class="top">
-        <div>
+        <div class="brand">
           <h1>Tab Snoozer</h1>
-          <p>Park a tab. Get it back later.</p>
+          <p>Close it for now. Open it when you’re ready.</p>
         </div>
-        <span id="count" class="pill">0</span>
+        <span id="count" class="count" title="Snoozed tabs">0</span>
       </header>
 
-      <section class="block">
+      <section class="section" aria-label="Snooze current tab">
+        <h2>Snooze for</h2>
         <div class="presets">
           <button type="button" class="chip" data-preset="1m">1m</button>
           <button type="button" class="chip" data-preset="15m">15m</button>
@@ -24,43 +25,46 @@
           <button type="button" class="chip" data-preset="1h">1h</button>
           <button type="button" class="chip" data-preset="2h">2h</button>
           <button type="button" class="chip" data-preset="tonight">Tonight</button>
-          <button type="button" class="chip" data-preset="tomorrow">Tomorrow</button>
+          <button type="button" class="chip wide" data-preset="tomorrow">Tomorrow</button>
         </div>
 
         <div class="custom">
-          <p class="custom-label">Custom time</p>
-          <input id="hours" type="number" min="0" max="720" value="0" aria-label="Hours" />
-          <span>h</span>
-          <input id="minutes" type="number" min="0" max="59" value="15" aria-label="Minutes" />
-          <span>m</span>
-          <button type="button" id="customSnooze" class="go">Snooze</button>
+          <label class="field-label" for="hours">Or set a time</label>
+          <div class="custom-row">
+            <input id="hours" type="number" min="0" max="720" value="0" aria-label="Hours" />
+            <span>h</span>
+            <input id="minutes" type="number" min="0" max="59" value="15" aria-label="Minutes" />
+            <span>m</span>
+            <button type="button" id="customSnooze" class="go">Snooze</button>
+          </div>
         </div>
         <p id="status" class="status" role="status" aria-live="polite"></p>
       </section>
 
-      <section class="block list-block">
+      <section class="section" aria-label="Snoozed tabs">
         <div class="row-head">
-          <h2>Snoozed tabs</h2>
+          <h2>Waiting</h2>
           <button type="button" id="clearAll" class="text-btn hidden">Clear all</button>
         </div>
         <ul id="list" class="queue"></ul>
-        <p id="empty" class="empty">No snoozed tabs yet</p>
+        <p id="empty" class="empty">Nothing waiting. Pick a time above.</p>
       </section>
 
-      <section class="block prefs">
+      <section class="section prefs" aria-label="Settings">
+        <h2>Settings</h2>
         <label class="pref">
           <span>
             <strong>Auto-open when due</strong>
-            <small>Off = notify first (recommended)</small>
+            <small>Otherwise remind first</small>
           </span>
-          <input id="autoOpenOnDue" type="checkbox" class="switch" />
+          <input id="autoOpenOnDue" type="checkbox" class="toggle" />
         </label>
         <label class="pref">
           <span>
             <strong>Page side tab</strong>
-            <small>Quick Snooze on websites</small>
+            <small>Quick snooze on websites</small>
           </span>
-          <input id="showPageLauncher" type="checkbox" class="switch" />
+          <input id="showPageLauncher" type="checkbox" class="toggle" />
         </label>
       </section>
     </main>

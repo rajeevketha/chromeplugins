@@ -121,7 +121,7 @@ async function updateBadge(tabs) {
   const text = pending ? String(pending) : "";
   await chrome.action.setBadgeText({ text });
   await chrome.action.setBadgeBackgroundColor({
-    color: ready ? "#C45C26" : "#1A5F6E"
+    color: ready ? "#9A5B00" : "#1E4D8C"
   });
 }
 

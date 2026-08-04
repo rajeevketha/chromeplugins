@@ -1,6 +1,6 @@
 ================================================================================
 Permission justifications — paste into Chrome Web Store Dashboard
-Tab Snoozer 1.8.1
+Tab Snoozer 1.8.2
 ================================================================================
 
 tabs

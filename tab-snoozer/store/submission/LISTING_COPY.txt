@@ -1,6 +1,6 @@
 ================================================================================
 Chrome Web Store — Tab Snoozer listing copy (paste into Developer Dashboard)
-Version covered: 1.8.2
+Version covered: 1.8.3
 ================================================================================
 
 LANGUAGE

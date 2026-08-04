@@ -4,7 +4,7 @@ Tiny Chrome extension: snooze a tab for later and get it back when you asked.
 
 **Park a tab. Get it back later.**
 
-## Features (v1.8.2)
+## Features (v1.8.3)
 
 - Presets: **1m / 15m / 30m / 1h / 2h / Tonight / Tomorrow**
 - **Custom hours + minutes** timer
@@ -30,8 +30,8 @@ Tiny Chrome extension: snooze a tab for later and get it back when you asked.
 
 Publishes to Files:
 
-- `TabSnoozer-1.8.2-store.zip` — upload package (manifest at root)
-- `TabSnoozer-1.8.2-cws-assets.zip` — listing copy, screenshots, promo
+- `TabSnoozer-1.8.3-store.zip` — upload package (manifest at root)
+- `TabSnoozer-1.8.3-cws-assets.zip` — listing copy, screenshots, promo
 
 Follow [`store/submission/SUBMIT_CHECKLIST.md`](store/submission/SUBMIT_CHECKLIST.md).
 

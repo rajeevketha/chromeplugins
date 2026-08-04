@@ -1,10 +1,10 @@
-# Tab Snoozer — Chrome Web Store submit checklist (v1.8.2)
+# Tab Snoozer — Chrome Web Store submit checklist (v1.8.3)
 
 ## 1. Upload package (required)
 
 - [ ] Run `./build-store-zip.sh` from `tab-snoozer/`
-- [ ] Upload **`TabSnoozer-1.8.2-store.zip`** from Files (manifest at zip root)
-- [ ] Confirm version **1.8.2**
+- [ ] Upload **`TabSnoozer-1.8.3-store.zip`** from Files (manifest at zip root)
+- [ ] Confirm version **1.8.3**
 - [ ] Confirm permissions: tabs, storage, alarms, notifications, scripting
 - [ ] Confirm host permissions: `http://*/*`, `https://*/*`
 

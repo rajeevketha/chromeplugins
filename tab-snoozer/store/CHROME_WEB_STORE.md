@@ -1,6 +1,6 @@
 # Tab Snoozer — Chrome Web Store pack
 
-Version: **1.8.2**
+Version: **1.8.3**
 
 ## Upload package
 
@@ -12,9 +12,9 @@ Publishes to Files (`/opt/cursor/artifacts`):
 
 | File | Use |
 |---|---|
-| `TabSnoozer-1.8.2-store.zip` | **Package** upload (manifest at zip root) |
+| `TabSnoozer-1.8.3-store.zip` | **Package** upload (manifest at zip root) |
 | `TabSnoozer-store.zip` | Stable alias of the same build |
-| `TabSnoozer-1.8.2-cws-assets.zip` | Listing copy, screenshots, promo, justifications |
+| `TabSnoozer-1.8.3-cws-assets.zip` | Listing copy, screenshots, promo, justifications |
 
 ## Listing materials
 

@@ -10,3 +10,9 @@ OrgKit/
 *.zip
 orgkit-*.zip
 sf-dev-toolkit-*.zip
+
+# Downloadable packages (Cursor Files zip UX is unreliable)
+!extension/releases/
+!extension/releases/**/*.zip
+!tab-snoozer/releases/
+!tab-snoozer/releases/**/*.zip

@@ -21,11 +21,12 @@
   const EDGE = {
     /** Prefer slightly below mid — many Salesforce edge tools sit near center. */
     preferredRatio: 0.58,
-    gap: 10,
-    sampleStep: 14,
-    maxTabWidth: 96,
-    edgePad: 18,
-    margin: 12
+    gap: 12,
+    sampleStep: 10,
+    maxTabWidth: 120,
+    edgePad: 64,
+    margin: 12,
+    sampleOffsets: [8, 18, 28, 40, 54]
   };
 
   const state = {
@@ -151,38 +152,47 @@
     );
   }
 
+  function looksLikeEdgeTab(el, vw) {
+    const style = window.getComputedStyle(el);
+    if (style.position !== "fixed" && style.position !== "sticky") return null;
+    if (style.visibility === "hidden" || style.display === "none") return null;
+    if (Number(style.opacity) === 0) return null;
+    const rect = el.getBoundingClientRect();
+    if (rect.height < 20 || rect.width < 6 || rect.width > EDGE.maxTabWidth) return null;
+    if (rect.right < vw - EDGE.edgePad) return null;
+    if (rect.left < vw - EDGE.maxTabWidth - 48) return null;
+    return rect;
+  }
+
   /** Other extensions often park slim fixed tabs on the right edge — find their Y ranges. */
   function collectRightEdgeOccupancy(excludeEl) {
     const vh = window.innerHeight || 800;
     const vw = window.innerWidth || 1200;
-    const x = Math.max(0, vw - 3);
     const ranges = [];
     const seen = new Set();
 
-    for (let y = 0; y < vh; y += EDGE.sampleStep) {
-      let els;
-      try {
-        els = document.elementsFromPoint(x, y);
-      } catch {
-        continue;
-      }
-      for (const el of els) {
-        if (!el || el === document.documentElement || el === document.body) continue;
-        if (el === excludeEl || isOrgKitEdgeNode(el) || excludeEl?.contains?.(el)) continue;
-        if (seen.has(el)) continue;
-        const style = window.getComputedStyle(el);
-        if (style.position !== "fixed" && style.position !== "sticky") continue;
-        if (style.visibility === "hidden" || style.display === "none") continue;
-        const rect = el.getBoundingClientRect();
-        if (rect.height < 24 || rect.width < 8 || rect.width > EDGE.maxTabWidth) continue;
-        if (rect.right < vw - EDGE.edgePad) continue;
-        if (rect.left < vw - EDGE.maxTabWidth - 24) continue;
-        seen.add(el);
-        ranges.push({
-          top: rect.top - EDGE.gap,
-          bottom: rect.bottom + EDGE.gap
-        });
-        break;
+    for (const offset of EDGE.sampleOffsets) {
+      const x = Math.max(0, vw - offset);
+      for (let y = 0; y < vh; y += EDGE.sampleStep) {
+        let els;
+        try {
+          els = document.elementsFromPoint(x, y);
+        } catch {
+          continue;
+        }
+        for (const el of els) {
+          if (!el || el === document.documentElement || el === document.body) continue;
+          if (el === excludeEl || isOrgKitEdgeNode(el) || excludeEl?.contains?.(el)) continue;
+          if (seen.has(el)) continue;
+          const rect = looksLikeEdgeTab(el, vw);
+          if (!rect) continue;
+          seen.add(el);
+          ranges.push({
+            top: rect.top - EDGE.gap,
+            bottom: rect.bottom + EDGE.gap
+          });
+          break;
+        }
       }
     }
 
@@ -249,10 +259,17 @@
     if (!state.showLauncher) return;
     const tab = state.launcher || state.restoreTab;
     if (!tab || !tab.isConnected) return;
-    // Measure after layout; use a sensible fallback before first paint.
     const rect = tab.getBoundingClientRect();
     const height = rect.height > 10 ? rect.height : state.minimized ? 64 : 96;
-    const top = findFreeEdgeTop(height);
+    // Hide ourselves so hit-testing can see other edge tabs underneath.
+    const hide = [tab, state.panel].filter(Boolean);
+    for (const el of hide) el.style.visibility = "hidden";
+    let top;
+    try {
+      top = findFreeEdgeTop(height);
+    } finally {
+      for (const el of hide) el.style.visibility = "";
+    }
     if (state.edgeTopPx != null && Math.abs(state.edgeTopPx - top) < 4) return;
     applyEdgePosition(top);
   }
@@ -280,14 +297,12 @@
 
     state.edgeWatch = { onResize, obs };
     // Other extensions often inject a moment after us.
-    window.setTimeout(() => {
-      state.edgeTopPx = null;
-      positionEdgeControls();
-    }, 400);
-    window.setTimeout(() => {
-      state.edgeTopPx = null;
-      positionEdgeControls();
-    }, 1500);
+    for (const ms of [300, 800, 1600, 3000]) {
+      window.setTimeout(() => {
+        state.edgeTopPx = null;
+        positionEdgeControls();
+      }, ms);
+    }
   }
 
   /** Compact right-edge tab (Inspector-style), or a slim Show control when minimized. */

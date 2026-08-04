@@ -8,12 +8,15 @@ Version: **1.8.3**
 ./build-store-zip.sh
 ```
 
-Publishes to Files (`/opt/cursor/artifacts`):
+Publishes to:
+
+1. **GitHub (reliable download):** `tab-snoozer/releases/TabSnoozer-1.8.3-store.zip`
+2. **Cursor Files attempt:** `/opt/cursor/artifacts/` (`.zip` download in Files UI is often broken)
 
 | File | Use |
 |---|---|
 | `TabSnoozer-1.8.3-store.zip` | **Package** upload (manifest at zip root) |
-| `TabSnoozer-store.zip` | Stable alias of the same build |
+| `TabSnoozer-store.zip` / `TabSnoozer-store-package.zip` | Stable aliases of the same build |
 | `TabSnoozer-1.8.3-cws-assets.zip` | Listing copy, screenshots, promo, justifications |
 
 ## Listing materials

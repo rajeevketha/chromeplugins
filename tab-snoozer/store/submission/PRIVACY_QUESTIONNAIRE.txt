@@ -1,0 +1,37 @@
+================================================================================
+Chrome Web Store privacy practices — Tab Snoozer 1.8.3
+================================================================================
+
+Single purpose
+--------------
+Yes — snooze tabs and restore them later with a reminder.
+
+Does the extension handle personal or sensitive user data?
+----------------------------------------------------------
+Yes, limited: URLs and titles of tabs the user chooses to snooze are stored locally in the browser profile.
+
+Data usage / collection
+-----------------------
+- Personally identifiable information: No (no accounts/emails collected by the extension)
+- Health information: No
+- Financial and payment information: No
+- Authentication information: No
+- Personal communications: No
+- Location: No
+- Web history: No (does not use the history API; only stores URLs the user explicitly snoozes)
+- User activity: No remote activity tracking
+- Website content: No scraping; content script only draws Tab Snoozer UI
+
+Remote code
+-----------
+No. All extension code is packaged in the store zip.
+
+Data storage / transmission
+---------------------------
+Data stays in chrome.storage.local on the user’s device. Tab Snoozer does not operate a backend and does not upload snoozed URLs/titles.
+
+Certification
+-------------
+- I do not sell or transfer user data to third parties: Yes / N/A — no remote transfer
+- I do not use or transfer user data for purposes unrelated to the item’s single purpose: Yes
+- I do not use or transfer user data to determine creditworthiness or for lending: Yes

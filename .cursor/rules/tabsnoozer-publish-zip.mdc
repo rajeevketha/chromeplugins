@@ -1,0 +1,35 @@
+---
+description: Always publish Tab Snoozer store zip to Files AND a GitHub-downloadable path
+alwaysApply: true
+---
+
+# Tab Snoozer packaging (required)
+
+After **any** change under `tab-snoozer/`, you MUST publish the store zip before ending the turn.
+
+## Required command
+
+```bash
+./tab-snoozer/build-store-zip.sh
+```
+
+## Required outcomes
+
+1. **Cursor Files attempt** — files under `/opt/cursor/artifacts/`:
+   - `TabSnoozer-<version>-store.zip`
+   - `TabSnoozer-store-package.zip`
+   - `TabSnoozer-LATEST.txt`
+   - Confirm upload: `exec-daemon-artifacts.json` status `3` for the versioned zip
+
+2. **Reliable user download (required)** — commit and push:
+   - `tab-snoozer/releases/TabSnoozer-<version>-store.zip`
+   - Tell the user the GitHub raw download URL, not a broken `/opt/cursor/artifacts/...` markdown link
+
+## Response requirement
+
+Do **not** claim a chat markdown link to `/opt/cursor/artifacts/...` works — Cursor Web does not reliably download `.zip` from Files.
+
+Always give:
+
+1. GitHub download URL for `tab-snoozer/releases/TabSnoozer-<version>-store.zip`
+2. Note that the same file was also written to Files (may appear under the agent Files panel, but zip download there is often broken)

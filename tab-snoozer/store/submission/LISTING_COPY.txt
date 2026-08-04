@@ -1,0 +1,60 @@
+================================================================================
+Chrome Web Store — Tab Snoozer listing copy (paste into Developer Dashboard)
+Version covered: 1.8.3
+================================================================================
+
+LANGUAGE
+  English (United States)
+
+CATEGORY
+  Productivity
+
+================================================================================
+NAME
+================================================================================
+
+Tab Snoozer
+
+================================================================================
+SHORT DESCRIPTION  (max 132 characters)
+================================================================================
+
+Snooze browser tabs for later. Get a clear reminder when it’s time to return. Local-only, no account.
+
+Character count: 107
+
+================================================================================
+DETAILED DESCRIPTION
+================================================================================
+
+Tab Snoozer helps you park a tab and come back to it later — without keeping a forest of tabs open.
+
+What you can do
+• Snooze the current tab for 1m / 15m / 30m / 1h / 2h / Tonight / Tomorrow
+• Set a custom hours + minutes timer
+• See every snoozed tab in one list — Open, Remove, or Clear all
+• Get reminded when a tab is due (Chrome notification + on-page toast)
+• Optional on-page “Snooze” side tab for quick access on websites
+• Side tab automatically avoids overlapping other right-edge extension tabs
+• Keyboard: Alt+Shift+Z (popup), Alt+Shift+S (snooze 15 minutes)
+
+How reminders work
+By default Tab Snoozer reminds you first (recommended). Turn on “Auto-open when due” if you prefer the tab to reopen automatically.
+
+Privacy
+• Local only — no accounts, sync servers, analytics, or ads
+• Stores only the URL, title, and wake time for tabs you snooze
+• Only http:// and https:// pages can be snoozed
+• Full policy: https://rajeevketha.github.io/chromeplugins/tab-snoozer/privacy.html
+
+================================================================================
+SINGLE PURPOSE
+================================================================================
+
+Tab Snoozer lets users temporarily close (snooze) browser tabs and restore them later with a reminder at a chosen time.
+
+================================================================================
+PRIVACY POLICY URL
+================================================================================
+
+https://rajeevketha.github.io/chromeplugins/tab-snoozer/privacy.html

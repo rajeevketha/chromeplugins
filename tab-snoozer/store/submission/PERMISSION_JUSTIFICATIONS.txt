@@ -1,0 +1,34 @@
+================================================================================
+Permission justifications — paste into Chrome Web Store Dashboard
+Tab Snoozer 1.8.3
+================================================================================
+
+tabs
+----
+Required to read the active tab’s URL and title when the user snoozes it, close that tab, reopen the saved URL later, and update the toolbar badge count of snoozed tabs. Tab Snoozer does not read browsing history and only acts on tabs the user explicitly snoozes or restores.
+
+storage
+-------
+Required to save the user’s snoozed-tab list (URL, title, wake time) and settings (auto-open, show page side tab) in chrome.storage.local on this device. Nothing is synced to a Tab Snoozer server.
+
+alarms
+------
+Required to wake snoozed tabs at the time the user chose (one-shot alarms plus a lightweight watchdog). Alarms stay on-device.
+
+notifications
+-------------
+Required to show a Chrome/OS notification when a snoozed tab is due so the reminder is visible even if the current page cannot host an in-page toast. Notification actions let the user open or snooze again. No notification content is sent off-device by this extension.
+
+scripting
+---------
+Required to inject/ensure the content script on the active http(s) tab so Tab Snoozer can show the in-page “tab is ready” toast and optional Snooze side tab. The script does not scrape page content; it only renders Tab Snoozer UI and sends snooze/restore commands the user clicks.
+
+Host permissions
+  http://*/*
+  https://*/*
+----------------
+Required so the content script and optional programmatic injection can run on normal websites where users snooze tabs and receive the on-page reminder toast / side tab. Tab Snoozer does not use host access to collect page content or send it to a server. Internal Chrome pages and non-http(s) schemes cannot be snoozed.
+
+Permissions intentionally NOT requested
+---------------------------------------
+No identity, cookies, history, webRequest, debugger, nativeMessaging, or remote code.

@@ -8,24 +8,25 @@ Chrome extension for Salesforce developers — day-to-day org tools (SOQL, Apex,
 
 ### Schema & metadata
 1. **Describe Browser** — Object/field describe, copy API names, picklists, **dependent picklist explorer**
-2. **Metadata Quick Open** — Search Apex/LWC/Aura/Flow/Objects/Profiles/Perm Sets and open in Setup
-3. **Package.xml Builder** — Multi-select metadata members → `package.xml`
-4. **Inactive Flow Cleaner** — Delete Draft/Obsolete/InvalidDraft versions (Active never deleted)
+2. **Org Compare** — Diff custom object + field inventory between two logged-in orgs (UAT vs Prod drift); copy API names / package.xml member handoff
+3. **Metadata Quick Open** — Search Apex/LWC/Aura/Flow/Objects/Profiles/Perm Sets and open in Setup
+4. **Package.xml Builder** — Multi-select metadata members → `package.xml`
+5. **Inactive Flow Cleaner** — Delete Draft/Obsolete/InvalidDraft versions (Active never deleted)
 
 ### Query & records
-5. **SOQL / Tooling runner** — Field autocomplete, saved library, Excel/Sheets export
-6. **Open / All data** — Open Lightning record; view all fields; update/delete with confirmation
-7. **NL → SOQL** — Offline rules (+ optional AI); matches custom objects from org describe
+6. **SOQL / Tooling runner** — Field autocomplete, saved library, Excel/Sheets export
+7. **Open / All data** — Open Lightning record; view all fields; update/delete with confirmation
+8. **NL → SOQL** — Offline rules (+ optional AI); matches custom objects from org describe
 
 ### Developer assistants
-8. Flow analyzer, governor heuristics, error decoder, debug log analyzer
-9. Formula builder, deploy checklist, permission investigator, Apex review
-10. Anonymous Apex + latest debug pull, Setup links, ID tools, favorites
+9. Flow analyzer, governor heuristics, error decoder, debug log analyzer
+10. Formula builder, deploy checklist, permission investigator, Apex review
+11. Anonymous Apex + latest debug pull, Setup links, ID tools, favorites
 
 ## Install (unpacked)
 
 1. Chrome → `chrome://extensions` → Developer mode
-2. **Load unpacked** → `extension/` folder (or unzip `OrgKit-1.6.0.zip`)
+2. **Load unpacked** → `extension/` folder (manifest **1.8.0** — Org Compare; Session Workbench may land separately as another 1.8.x line)
 3. Open a **logged-in** Salesforce tab
 4. Allow Site access for Salesforce domains (or On all sites)
 5. Click the OrgKit icon / Alt+Shift+O / on-page **OrgKit** tab

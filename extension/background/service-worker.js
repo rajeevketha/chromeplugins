@@ -14,6 +14,11 @@ import {
   summarizeFlowVersion,
   INACTIVE_FLOW_STATUSES
 } from "../lib/flow-cleaner.js";
+import {
+  filterGlobalObjects,
+  normalizeObjectDescribe,
+  isCustomObjectName
+} from "../lib/org-compare.js";
 
 chrome.runtime.onInstalled.addListener((details) => {
   chrome.storage.sync.get(
@@ -76,6 +81,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     },
     openOrgKit: () => openOrgKitTab(message.view),
     getActiveTabOrg: () => getActiveTabOrg(),
+    listSalesforceOrgs: () => listSalesforceOrgs(),
+    fetchOrgInventory: () =>
+      fetchOrgInventory(message.tabUrl, {
+        mode: message.mode,
+        apiVersion: message.apiVersion,
+        maxObjects: message.maxObjects
+      }),
     searchMetadata: () => searchMetadata(message.tabUrl, message.query, message.typeId, message.apiVersion),
     listPackageTypeMembers: () =>
       listPackageTypeMembers(message.tabUrl, message.typeName, message.apiVersion),
@@ -85,12 +97,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     executeAnonymous: () => executeAnonymous(message.tabUrl, message.apex, message.apiVersion),
     fetchLatestApexDebug: () => fetchLatestApexDebug(message.tabUrl, message.apiVersion),
     getExtensionVersion: async () => ({
-      version: "1.7.0",
+      version: "1.8.0",
       hasSearchMetadata: typeof searchMetadata === "function",
       hasFlowCleaner: typeof listInactiveFlowVersions === "function",
       hasExecuteAnonymous: typeof executeAnonymous === "function",
       hasOrgLimits: typeof getOrgLimits === "function",
       hasRecordCrud: typeof updateSObject === "function",
+      hasOrgCompare: typeof fetchOrgInventory === "function",
       privacyPolicy: "privacy.html",
       metadataTypeCount: METADATA_SEARCH_TYPES.length,
       packageTypeCount: PACKAGE_TYPES.length
@@ -249,7 +262,7 @@ async function getOrgSession(tabUrl) {
   return { org, session };
 }
 
-async function getSessionForOrg(org) {
+async function getSessionForOrg(org, { strict = false } = {}) {
   if (!org) throw new Error("Missing org");
 
   // Prefer my.salesforce.com sid for REST/Tooling. Lightning/setup sids are
@@ -275,8 +288,9 @@ async function getSessionForOrg(org) {
     }
   }
 
-  if (!sid) {
+  if (!sid && !strict) {
     // Only read sid cookies on Salesforce-related domains (never scan unrelated sites).
+    // Non-strict fallback helps single-org UX; Org Compare uses strict to avoid cross-org sid mixups.
     const sfCookies = await listSalesforceSidCookies();
     const ranked = [...sfCookies].sort((a, b) => apiCookieRank(b.domain) - apiCookieRank(a.domain));
     const match = ranked[0];
@@ -304,6 +318,199 @@ async function getSessionForOrg(org) {
   }
 
   return { sid, apiBase, cookieHost, userInfo };
+}
+
+/**
+ * List open Salesforce tabs / cookie-backed sessions for dual-org pickers.
+ * Never returns sid values — only host, labels, and a tabUrl for subsequent API calls.
+ */
+async function listSalesforceOrgs() {
+  const tabs = await chrome.tabs.query({});
+  const sfTabs = (tabs || []).filter(
+    (t) => t?.url && isSalesforceUrl(t.url) && !isLoginOnlyUrl(t.url)
+  );
+
+  /** @type {Map<string, object>} */
+  const byKey = new Map();
+
+  const upsert = (entry) => {
+    const key = entry.orgKey;
+    if (!key) return;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, entry);
+      return;
+    }
+    // Prefer entries that have a session + a live tab.
+    const prevScore = (prev.hasSession ? 2 : 0) + (prev.tabId ? 1 : 0);
+    const nextScore = (entry.hasSession ? 2 : 0) + (entry.tabId ? 1 : 0);
+    if (nextScore > prevScore) byKey.set(key, { ...prev, ...entry });
+    else if (entry.tabId && !prev.tabId) byKey.set(key, { ...prev, tabId: entry.tabId, tabUrl: entry.tabUrl });
+  };
+
+  for (const tab of sfTabs) {
+    const org = parseOrgFromUrl(tab.url);
+    if (!org) continue;
+    let session = null;
+    try {
+      session = await getSessionForOrg(org, { strict: true });
+    } catch {
+      session = null;
+    }
+    const orgId = session?.userInfo?.organization_id || "";
+    const orgKey = orgId || org.apiBase || org.hostname;
+    const username =
+      session?.userInfo?.preferred_username ||
+      session?.userInfo?.email ||
+      session?.userInfo?.username ||
+      "";
+    const displayName =
+      session?.userInfo?.organization_id && session?.userInfo?.preferred_username
+        ? `${org.myDomain || org.hostname} · ${username}`
+        : org.myDomain || org.hostname;
+    upsert({
+      orgKey,
+      tabId: tab.id,
+      tabUrl: tab.url,
+      hostname: org.hostname,
+      apiBase: session?.apiBase || org.apiBase,
+      myDomain: org.myDomain,
+      envLabel: org.envLabel,
+      isSandbox: !!org.isSandbox,
+      isDevEd: !!org.isDevEd,
+      hasSession: !!session?.sid,
+      username,
+      orgId,
+      label: `${org.envLabel}: ${displayName}`
+    });
+  }
+
+  // Cookie-backed sessions without a matching open tab (still usable via apiBase URL).
+  try {
+    const cookies = await listSalesforceSidCookies();
+    for (const c of cookies) {
+      const domain = String(c.domain || "").replace(/^\./, "").toLowerCase();
+      if (!domain || apiCookieRank(domain) < 2) continue;
+      const apiBase = toSalesforceApiBase(domain);
+      const tabUrl = `${apiBase}/`;
+      const org = parseOrgFromUrl(tabUrl);
+      if (!org) continue;
+      let session = null;
+      try {
+        session = await getSessionForOrg(org, { strict: true });
+      } catch {
+        session = null;
+      }
+      if (!session?.sid) continue;
+      const orgId = session?.userInfo?.organization_id || "";
+      const orgKey = orgId || org.apiBase || org.hostname;
+      if (byKey.has(orgKey)) continue;
+      const username =
+        session?.userInfo?.preferred_username ||
+        session?.userInfo?.email ||
+        session?.userInfo?.username ||
+        "";
+      upsert({
+        orgKey,
+        tabId: null,
+        tabUrl,
+        hostname: org.hostname,
+        apiBase: session.apiBase || org.apiBase,
+        myDomain: org.myDomain,
+        envLabel: org.envLabel,
+        isSandbox: !!org.isSandbox,
+        isDevEd: !!org.isDevEd,
+        hasSession: true,
+        username,
+        orgId,
+        label: `${org.envLabel}: ${org.myDomain || org.hostname}${username ? ` · ${username}` : ""} (cookie)`
+      });
+    }
+  } catch {
+    /* ignore cookie enumeration failures */
+  }
+
+  return [...byKey.values()].sort((a, b) => {
+    if (!!b.hasSession !== !!a.hasSession) return b.hasSession ? 1 : -1;
+    return String(a.label).localeCompare(String(b.label));
+  });
+}
+
+/**
+ * Build a field/object inventory for one org via REST describe (no Metadata API).
+ * Defaults to custom objects (+ __mdt) for speed.
+ */
+async function fetchOrgInventory(tabUrl, options = {}) {
+  const mode = options.mode || "custom";
+  const apiVersion = options.apiVersion || DEFAULT_API_VERSION;
+  const maxObjects = Math.min(Math.max(Number(options.maxObjects) || 200, 1), 500);
+
+  const { org, session } = await getOrgSessionStrict(tabUrl);
+  if (!session?.sid) {
+    throw new Error("No Salesforce session cookie for that org. Open a logged-in tab for it.");
+  }
+  await ensureHostFetchAllowed(session.apiBase);
+
+  const globalUrl = restUrl(session.apiBase, "/sobjects", apiVersion);
+  const global = await sfFetchUrl(globalUrl, session.sid);
+  const targets = filterGlobalObjects(global?.sobjects || [], mode).slice(0, maxObjects);
+
+  const objects = {};
+  const errors = [];
+  const concurrency = 5;
+  let index = 0;
+
+  async function worker() {
+    while (index < targets.length) {
+      const i = index;
+      index += 1;
+      const name = targets[i].name;
+      try {
+        const path = `/sobjects/${name}/describe`;
+        const url = restUrl(session.apiBase, path, apiVersion);
+        const desc = await sfFetchUrl(url, session.sid);
+        const normalized = normalizeObjectDescribe(desc);
+        if (normalized) objects[normalized.name] = normalized;
+      } catch (e) {
+        errors.push({ object: name, error: e.message || String(e) });
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, targets.length || 1) }, () => worker()));
+
+  const username =
+    session.userInfo?.preferred_username ||
+    session.userInfo?.email ||
+    session.userInfo?.username ||
+    "";
+  const orgKey = session.userInfo?.organization_id || org.apiBase || org.hostname;
+
+  return {
+    orgKey,
+    label: `${org.envLabel}: ${org.myDomain || org.hostname}`,
+    hostname: org.hostname,
+    apiBase: session.apiBase,
+    envLabel: org.envLabel,
+    username,
+    mode,
+    objectCount: Object.keys(objects).length,
+    scanned: targets.length,
+    truncated: (global?.sobjects || []).length > 0 && filterGlobalObjects(global.sobjects || [], mode).length > maxObjects,
+    errors,
+    objects,
+    // Convenience counts for UI
+    customObjectCount: Object.values(objects).filter((o) => isCustomObjectName(o.name)).length
+  };
+}
+
+async function getOrgSessionStrict(tabUrl) {
+  if (!tabUrl || !isSalesforceUrl(tabUrl)) {
+    throw new Error("Not a Salesforce tab");
+  }
+  const org = parseOrgFromUrl(tabUrl);
+  const session = await getSessionForOrg(org, { strict: true });
+  return { org, session };
 }
 
 /** Higher = better for Salesforce REST API Authorization: Bearer. */

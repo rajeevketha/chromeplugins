@@ -1031,3 +1031,115 @@ button.linkish:hover,
     justify-content: flex-start;
   }
 }
+
+/* Org Compare */
+.compare-pickers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 640px) {
+  .compare-pickers { grid-template-columns: 1fr; }
+}
+.compare-picker .label { margin-top: 0; }
+.check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.check-inline input { margin: 0; }
+.compare-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.compare-stat {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--muted);
+}
+.compare-stat strong {
+  display: block;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.compare-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.compare-tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+.compare-tab:hover { color: var(--text); }
+.compare-tab.active {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent);
+}
+.compare-actions { margin-top: 8px; }
+.compare-results {
+  margin-top: 8px;
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+html.shell-wide .compare-results {
+  max-height: min(55vh, 520px);
+}
+.compare-row {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(42, 74, 107, 0.35);
+}
+.compare-row:last-child { border-bottom: 0; }
+.compare-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: baseline;
+}
+.compare-row-head code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: #b7d0ea;
+}
+.compare-row-head .muted { color: var(--muted); font-size: 11.5px; }
+.compare-field-list {
+  margin: 6px 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 12px;
+}
+.compare-field-list li { margin: 2px 0; }
+.compare-field-list code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: #c5d8ec;
+}
+.compare-empty {
+  padding: 16px 12px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 12.5px;
+}

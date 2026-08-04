@@ -186,6 +186,51 @@
     <div id="describeDependent" class="report"></div>
   </section>
 
+  <!-- FEATURE: Org Compare -->
+  <section id="view-org-compare" class="view">
+    <p class="hint">
+      Compare custom object and field inventory between two logged-in Salesforce orgs (UAT vs Prod drift).
+      Uses open tab / cookie sessions only — no passwords, and <code>sid</code> is never stored.
+    </p>
+    <div class="compare-pickers">
+      <div class="compare-picker">
+        <label class="label" for="compareOrgLeft">Left org (A)</label>
+        <select id="compareOrgLeft" class="select block-select"></select>
+      </div>
+      <div class="compare-picker">
+        <label class="label" for="compareOrgRight">Right org (B)</label>
+        <select id="compareOrgRight" class="select block-select"></select>
+      </div>
+    </div>
+    <div class="row wrap" style="margin-top:8px">
+      <label class="label tight" for="compareMode">Scope</label>
+      <select id="compareMode" class="select" title="Which objects to describe">
+        <option value="custom" selected>Custom objects + CMDT</option>
+        <option value="custom-no-mdt">Custom objects only (__c)</option>
+        <option value="all">All objects (slower)</option>
+      </select>
+      <label class="check-inline">
+        <input type="checkbox" id="compareCustomFieldsOnly" />
+        Diff custom fields only
+      </label>
+      <button type="button" class="btn" id="refreshCompareOrgs">Refresh orgs</button>
+      <button type="button" class="btn primary" id="runOrgCompare">Compare</button>
+    </div>
+    <div id="compareStatus" class="hint"></div>
+    <div id="compareSummary" class="compare-summary hidden"></div>
+    <div id="compareTabs" class="compare-tabs hidden" role="tablist">
+      <button type="button" class="compare-tab active" data-compare-tab="onlyA">Only in A</button>
+      <button type="button" class="compare-tab" data-compare-tab="onlyB">Only in B</button>
+      <button type="button" class="compare-tab" data-compare-tab="differ">Differ</button>
+    </div>
+    <input type="search" id="compareFilter" class="input hidden" placeholder="Filter objects / fields…" style="margin-top:8px" />
+    <div class="row wrap compare-actions hidden" id="compareActions">
+      <button type="button" class="btn" id="copyCompareApiNames">Copy API names</button>
+      <button type="button" class="btn" id="copyComparePackageMembers">Copy package.xml members</button>
+    </div>
+    <div id="compareResults" class="compare-results"></div>
+  </section>
+
   <!-- FEATURE: Metadata Quick Open -->
   <section id="view-meta-open" class="view">
     <label class="label" for="metaType">Type (optional)</label>

@@ -6,6 +6,9 @@ Chrome extension for Salesforce developers — day-to-day org tools (SOQL, Apex,
 
 ## Features
 
+### Session Workbench (home)
+0. **Session Workbench** — Default home: quick launch, Continue (recent SOQL/Apex/describe/metadata), pinned SOQL for this org, and a per-org scratch pad. History stays in local browser storage (no `sid`).
+
 ### Schema & metadata
 1. **Describe Browser** — Object/field describe, copy API names, picklists, **dependent picklist explorer**
 2. **Metadata Quick Open** — Search Apex/LWC/Aura/Flow/Objects/Profiles/Perm Sets and open in Setup

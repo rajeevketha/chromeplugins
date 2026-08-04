@@ -60,11 +60,23 @@ import {
   summarizeExecuteAnonymous,
   extractDebugOutput
 } from "../lib/anonymous-apex.js";
+import {
+  compareInventories,
+  filterCompareResults,
+  collectApiNames,
+  toPackageMemberList,
+  formatFieldShort
+} from "../lib/org-compare.js";
 
 const FEATURES = [
   { id: "soql-run", title: "SOQL Runner", blurb: "Query standard & custom objects" },
   { id: "anon-apex", title: "Anonymous Apex", blurb: "Run Apex and view debug output" },
   { id: "describe", title: "Describe Browser", blurb: "Fields & dependencies for any object" },
+  {
+    id: "org-compare",
+    title: "Org Compare",
+    blurb: "UAT vs Prod custom object & field drift"
+  },
   { id: "meta-open", title: "Metadata Quick Open", blurb: "Open classes, flows, LWCs, and more" },
   { id: "package", title: "Package.xml Builder", blurb: "Build package.xml from selected members" },
   { id: "flow-clean", title: "Inactive Flow Cleaner", blurb: "Remove inactive versions safely" },
@@ -81,6 +93,7 @@ const FEATURES = [
 const TITLES = {
   home: "OrgKit",
   describe: "Describe Browser",
+  "org-compare": "Org Compare",
   "meta-open": "Metadata Quick Open",
   package: "Package.xml Builder",
   "flow-clean": "Inactive Flow Cleaner",
@@ -155,7 +168,17 @@ const state = {
     suggestTimer: null
   },
   apexClassResults: [],
-  orgLimits: null
+  orgLimits: null,
+  orgCompare: {
+    orgs: [],
+    left: null,
+    right: null,
+    leftInv: null,
+    rightInv: null,
+    raw: null,
+    tab: "onlyA",
+    running: false
+  }
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -242,6 +265,9 @@ function showView(id) {
   if (id === "apex" && !state.apexClassResults.length) {
     searchApexClasses("").catch(() => {});
   }
+  if (id === "org-compare") {
+    loadCompareOrgs().catch(() => {});
+  }
 }
 
 function bindFeatureActions() {
@@ -316,6 +342,24 @@ function bindFeatureActions() {
     renderInactiveFlows();
   });
   $("#deleteInactiveFlows").addEventListener("click", onDeleteInactiveFlows);
+
+  $("#refreshCompareOrgs")?.addEventListener("click", () => loadCompareOrgs());
+  $("#runOrgCompare")?.addEventListener("click", onRunOrgCompare);
+  $("#compareFilter")?.addEventListener("input", () => renderOrgCompareResults());
+  $("#compareCustomFieldsOnly")?.addEventListener("change", () => {
+    if (state.orgCompare.raw) rerunOrgCompareDiff();
+  });
+  $("#copyCompareApiNames")?.addEventListener("click", onCopyCompareApiNames);
+  $("#copyComparePackageMembers")?.addEventListener("click", onCopyComparePackageMembers);
+  document.querySelectorAll("[data-compare-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.orgCompare.tab = btn.getAttribute("data-compare-tab") || "onlyA";
+      document.querySelectorAll("[data-compare-tab]").forEach((b) => {
+        b.classList.toggle("active", b === btn);
+      });
+      renderOrgCompareResults();
+    });
+  });
 }
 
 function bindUtilityActions() {
@@ -1783,6 +1827,282 @@ function renderDependentInteractive(map) {
   };
   sel.addEventListener("change", paint);
   paint();
+}
+
+async function loadCompareOrgs() {
+  const status = $("#compareStatus");
+  const leftSel = $("#compareOrgLeft");
+  const rightSel = $("#compareOrgRight");
+  if (!leftSel || !rightSel) return;
+
+  const prevLeft = leftSel.value;
+  const prevRight = rightSel.value;
+  if (status) status.textContent = "Loading Salesforce sessions…";
+
+  const res = await send("listSalesforceOrgs");
+  if (!res.ok) {
+    if (status) status.textContent = res.error || "Could not list orgs.";
+    return;
+  }
+
+  const orgs = Array.isArray(res.result) ? res.result : [];
+  state.orgCompare.orgs = orgs;
+
+  const fill = (sel, preferred) => {
+    sel.innerHTML = "";
+    if (!orgs.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "No Salesforce sessions found";
+      sel.appendChild(opt);
+      return;
+    }
+    for (const org of orgs) {
+      const opt = document.createElement("option");
+      opt.value = org.orgKey;
+      const sess = org.hasSession ? "" : " (no sid)";
+      opt.textContent = `${org.label}${sess}`;
+      opt.disabled = !org.hasSession;
+      sel.appendChild(opt);
+    }
+    if (preferred && [...sel.options].some((o) => o.value === preferred && !o.disabled)) {
+      sel.value = preferred;
+    }
+  };
+
+  fill(leftSel, prevLeft);
+  fill(rightSel, prevRight);
+
+  // Default: pick two different orgs when possible
+  if (!prevLeft && !prevRight && orgs.length >= 2) {
+    const withSession = orgs.filter((o) => o.hasSession);
+    if (withSession[0]) leftSel.value = withSession[0].orgKey;
+    if (withSession[1]) rightSel.value = withSession[1].orgKey;
+    else if (withSession[0] && orgs[1]) rightSel.value = orgs[1].orgKey;
+  } else if (!prevRight && orgs.length >= 2 && leftSel.value) {
+    const other = orgs.find((o) => o.orgKey !== leftSel.value && o.hasSession);
+    if (other) rightSel.value = other.orgKey;
+  }
+
+  if (status) {
+    status.textContent = orgs.length
+      ? `${orgs.length} org session${orgs.length === 1 ? "" : "s"} found. Pick Left and Right, then Compare.`
+      : "Open logged-in Salesforce tabs for the orgs you want to compare, then refresh.";
+  }
+}
+
+function getCompareOrgByKey(orgKey) {
+  return state.orgCompare.orgs.find((o) => o.orgKey === orgKey) || null;
+}
+
+async function onRunOrgCompare() {
+  const status = $("#compareStatus");
+  const leftKey = $("#compareOrgLeft")?.value;
+  const rightKey = $("#compareOrgRight")?.value;
+  const left = getCompareOrgByKey(leftKey);
+  const right = getCompareOrgByKey(rightKey);
+
+  if (!left?.tabUrl || !right?.tabUrl) {
+    if (status) status.textContent = "Select two Salesforce orgs with active sessions.";
+    return;
+  }
+  if (left.orgKey === right.orgKey) {
+    if (status) status.textContent = "Pick two different orgs (Left and Right must differ).";
+    return;
+  }
+  if (!left.hasSession || !right.hasSession) {
+    if (status) status.textContent = "Both orgs need a session cookie. Open a logged-in tab for each.";
+    return;
+  }
+
+  const mode = $("#compareMode")?.value || "custom";
+  state.orgCompare.running = true;
+  state.orgCompare.left = left;
+  state.orgCompare.right = right;
+  setCompareChromeVisible(false);
+  if (status) {
+    status.textContent = `Describing ${left.label} and ${right.label}… (custom objects via REST describe)`;
+  }
+
+  try {
+    const apiVer = apiVersion();
+    const [leftRes, rightRes] = await Promise.all([
+      send("fetchOrgInventory", { tabUrl: left.tabUrl, mode, apiVersion: apiVer }),
+      send("fetchOrgInventory", { tabUrl: right.tabUrl, mode, apiVersion: apiVer })
+    ]);
+    if (!leftRes.ok) throw new Error(`Left org: ${leftRes.error || "inventory failed"}`);
+    if (!rightRes.ok) throw new Error(`Right org: ${rightRes.error || "inventory failed"}`);
+
+    state.orgCompare.leftInv = leftRes.result;
+    state.orgCompare.rightInv = rightRes.result;
+    rerunOrgCompareDiff();
+
+    const errCount =
+      (leftRes.result.errors?.length || 0) + (rightRes.result.errors?.length || 0);
+    const trunc =
+      leftRes.result.truncated || rightRes.result.truncated
+        ? " Object list truncated for speed."
+        : "";
+    if (status) {
+      status.textContent = `Compared ${leftRes.result.objectCount} vs ${rightRes.result.objectCount} objects.${
+        errCount ? ` ${errCount} describe error(s).` : ""
+      }${trunc}`;
+    }
+  } catch (e) {
+    if (status) status.textContent = e.message || String(e);
+    $("#compareResults").innerHTML = `<div class="compare-empty">${escapeHtml(e.message || String(e))}</div>`;
+  } finally {
+    state.orgCompare.running = false;
+  }
+}
+
+function rerunOrgCompareDiff() {
+  const leftInv = state.orgCompare.leftInv;
+  const rightInv = state.orgCompare.rightInv;
+  if (!leftInv || !rightInv) return;
+  const customFieldsOnly = !!$("#compareCustomFieldsOnly")?.checked;
+  state.orgCompare.raw = compareInventories(leftInv, rightInv, { customFieldsOnly });
+  setCompareChromeVisible(true);
+  renderOrgCompareSummary();
+  renderOrgCompareResults();
+}
+
+function setCompareChromeVisible(visible) {
+  $("#compareSummary")?.classList.toggle("hidden", !visible);
+  $("#compareTabs")?.classList.toggle("hidden", !visible);
+  $("#compareFilter")?.classList.toggle("hidden", !visible);
+  $("#compareActions")?.classList.toggle("hidden", !visible);
+}
+
+function renderOrgCompareSummary() {
+  const el = $("#compareSummary");
+  const raw = state.orgCompare.raw;
+  if (!el || !raw) return;
+  const s = raw.summary || {};
+  const left = state.orgCompare.leftInv;
+  const right = state.orgCompare.rightInv;
+  el.innerHTML = `
+    <div class="compare-stat"><strong>${s.onlyA ?? 0}</strong>Only in A</div>
+    <div class="compare-stat"><strong>${s.onlyB ?? 0}</strong>Only in B</div>
+    <div class="compare-stat"><strong>${s.differ ?? 0}</strong>Differ</div>
+    <div class="compare-stat"><strong>${s.sameObjects ?? 0}</strong>Same</div>
+    <div class="compare-stat"><strong>${s.leftObjects ?? 0}</strong>${escapeHtml(left?.envLabel || "A")} objects</div>
+    <div class="compare-stat"><strong>${s.rightObjects ?? 0}</strong>${escapeHtml(right?.envLabel || "B")} objects</div>
+  `;
+}
+
+function getFilteredCompareBucket() {
+  const raw = state.orgCompare.raw;
+  if (!raw) return [];
+  const filtered = filterCompareResults(raw, {
+    query: $("#compareFilter")?.value || "",
+    customOnly: false
+  });
+  const tab = state.orgCompare.tab || "onlyA";
+  if (tab === "onlyB") return filtered.onlyB || [];
+  if (tab === "differ") return filtered.differ || [];
+  return filtered.onlyA || [];
+}
+
+function renderOrgCompareResults() {
+  const root = $("#compareResults");
+  if (!root) return;
+  if (!state.orgCompare.raw) {
+    root.innerHTML = "";
+    return;
+  }
+  const rows = getFilteredCompareBucket();
+  const tab = state.orgCompare.tab || "onlyA";
+  if (!rows.length) {
+    root.innerHTML = `<div class="compare-empty">No differences in this bucket${
+      ($("#compareFilter")?.value || "").trim() ? " for the current filter" : ""
+    }.</div>`;
+    return;
+  }
+
+  if (tab === "differ") {
+    root.innerHTML = rows
+      .map((row) => {
+        const parts = [];
+        if (row.onlyA?.length) {
+          parts.push(
+            `<li><strong>Only in A</strong><ul>${row.onlyA
+              .map(
+                (f) =>
+                  `<li><code>${escapeHtml(f.name)}</code> · ${escapeHtml(formatFieldShort(f.field))}</li>`
+              )
+              .join("")}</ul></li>`
+          );
+        }
+        if (row.onlyB?.length) {
+          parts.push(
+            `<li><strong>Only in B</strong><ul>${row.onlyB
+              .map(
+                (f) =>
+                  `<li><code>${escapeHtml(f.name)}</code> · ${escapeHtml(formatFieldShort(f.field))}</li>`
+              )
+              .join("")}</ul></li>`
+          );
+        }
+        if (row.differ?.length) {
+          parts.push(
+            `<li><strong>Field diffs</strong><ul>${row.differ
+              .map(
+                (f) =>
+                  `<li><code>${escapeHtml(f.name)}</code> · ${escapeHtml((f.reasons || []).join("; "))}</li>`
+              )
+              .join("")}</ul></li>`
+          );
+        }
+        return `<div class="compare-row">
+          <div class="compare-row-head">
+            <code>${escapeHtml(row.object)}</code>
+            <span class="muted">${escapeHtml(row.label || "")}</span>
+          </div>
+          <ul class="compare-field-list">${parts.join("")}</ul>
+        </div>`;
+      })
+      .join("");
+    return;
+  }
+
+  root.innerHTML = rows
+    .map(
+      (row) => `<div class="compare-row">
+        <div class="compare-row-head">
+          <code>${escapeHtml(row.object)}</code>
+          <span class="muted">${escapeHtml(row.label || "")} · ${row.fieldCount ?? 0} fields</span>
+        </div>
+      </div>`
+    )
+    .join("");
+}
+
+async function onCopyCompareApiNames() {
+  const rows = getFilteredCompareBucket();
+  const tab = state.orgCompare.tab || "onlyA";
+  let names;
+  if (tab === "differ") names = collectApiNames(rows, "all");
+  else names = collectApiNames(rows, "objects");
+  if (!names.length) return;
+  await copyText(names.join("\n"));
+  const status = $("#compareStatus");
+  if (status) status.textContent = `Copied ${names.length} API name(s).`;
+}
+
+async function onCopyComparePackageMembers() {
+  const rows = getFilteredCompareBucket();
+  const tab = state.orgCompare.tab || "onlyA";
+  // Prefer object-level members; for Differ, include objects that have field drift.
+  const objectNames =
+    tab === "differ"
+      ? [...new Set(rows.map((r) => r.object).filter(Boolean))]
+      : collectApiNames(rows, "objects");
+  const xml = toPackageMemberList(objectNames);
+  if (!xml) return;
+  await copyText(xml);
+  const status = $("#compareStatus");
+  if (status) status.textContent = `Copied package.xml CustomObject member list (${objectNames.length}).`;
 }
 
 async function onSearchMeta() {

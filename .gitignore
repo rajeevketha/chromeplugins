@@ -10,3 +10,6 @@ OrgKit/
 *.zip
 orgkit-*.zip
 sf-dev-toolkit-*.zip
+
+!extension/releases/
+!extension/releases/**/*.zip

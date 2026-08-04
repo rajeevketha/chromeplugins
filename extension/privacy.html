@@ -76,7 +76,8 @@
         </li>
         <li>
           <strong>Settings &amp; library items</strong> — favorites, API version, UI toggles, saved SOQL
-          names/queries, optional AI settings. Stored in Chrome extension storage on your device/profile.
+          names/queries, Session Workbench continue history and scratch pad (per org key), optional AI settings.
+          Stored in Chrome extension storage on your device/profile.
           Saved SOQL never includes your session id.
         </li>
         <li>
@@ -90,7 +91,7 @@
       <h2>Permissions (why they exist)</h2>
       <ul>
         <li><strong>cookies</strong> — read Salesforce <code>sid</code> on Salesforce domains only (same session model as tools like Salesforce Inspector Reloaded).</li>
-        <li><strong>storage</strong> — settings, favorites, saved queries, optional AI key (local). Never stores <code>sid</code>.</li>
+        <li><strong>storage</strong> — settings, favorites, saved queries, workbench history/scratch pad, optional AI key (local). Never stores <code>sid</code>.</li>
         <li><strong>Host access to Salesforce domains</strong> — call Salesforce APIs and show the on-page OrgKit launcher on Salesforce pages only.</li>
         <li><strong>Optional OpenAI hosts</strong> — only after you enable AI and grant access.</li>
       </ul>

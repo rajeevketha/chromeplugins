@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "OrgKit",
-  "version": "1.7.0",
-  "description": "Salesforce toolkit: SOQL/Tooling, custom metadata edit, NL\u2192SOQL. In-browser session only.",
+  "version": "1.8.0",
+  "description": "Salesforce toolkit: Session Workbench, SOQL/Tooling, describe, NL\u2192SOQL. In-browser session only.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",

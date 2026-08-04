@@ -60,6 +60,15 @@ import {
   summarizeExecuteAnonymous,
   extractDebugOutput
 } from "../lib/anonymous-apex.js";
+import {
+  recordActivity,
+  listActivity,
+  clearActivity,
+  getScratchPad,
+  saveScratchPad,
+  formatActivityTime,
+  activityTypeLabel
+} from "../lib/session-workbench.js";
 
 const FEATURES = [
   { id: "soql-run", title: "SOQL Runner", blurb: "Query standard & custom objects" },
@@ -79,7 +88,7 @@ const FEATURES = [
 ];
 
 const TITLES = {
-  home: "OrgKit",
+  home: "Session Workbench",
   describe: "Describe Browser",
   "meta-open": "Metadata Quick Open",
   package: "Package.xml Builder",
@@ -155,7 +164,10 @@ const state = {
     suggestTimer: null
   },
   apexClassResults: [],
-  orgLimits: null
+  orgLimits: null,
+  sessionActivity: [],
+  scratchPad: { soql: "", apex: "" },
+  scratchSaveTimer: null
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -169,6 +181,7 @@ async function init() {
   });
   renderFeatureGrid();
   bindNav();
+  bindWorkbench();
   bindFeatureActions();
   bindUtilityActions();
   bindRecordDrawer();
@@ -182,6 +195,7 @@ async function init() {
   bindDescribeObjectSearch();
   await refreshOrg();
   await refreshSoqlLibrary();
+  await refreshWorkbench();
   const deepView = new URLSearchParams(location.search).get("view");
   showView(deepView && TITLES[deepView] ? deepView : "home");
 }
@@ -229,6 +243,9 @@ function showView(id) {
   if (el) el.classList.add("active");
   $("#headerTitle").textContent = TITLES[id] || "OrgKit";
   $("#backBtn").classList.toggle("hidden", id === "home");
+  if (id === "home") {
+    refreshWorkbench().catch(() => {});
+  }
   if (id === "describe" || id === "perms") {
     preloadGlobalObjects().catch(() => {});
   }
@@ -242,6 +259,169 @@ function showView(id) {
   if (id === "apex" && !state.apexClassResults.length) {
     searchApexClasses("").catch(() => {});
   }
+}
+
+function bindWorkbench() {
+  $("#wbClearContinue")?.addEventListener("click", async () => {
+    state.sessionActivity = await clearActivity(currentOrgKey());
+    renderWorkbenchContinue();
+  });
+  $("#wbOpenScratchSoql")?.addEventListener("click", async () => {
+    await persistScratchPadNow();
+    $("#soqlInput").value = $("#wbScratchSoql")?.value || "";
+    showView("soql-run");
+  });
+  $("#wbOpenScratchApex")?.addEventListener("click", async () => {
+    await persistScratchPadNow();
+    $("#anonApexInput").value = $("#wbScratchApex")?.value || "";
+    showView("anon-apex");
+  });
+  const soql = $("#wbScratchSoql");
+  const apex = $("#wbScratchApex");
+  const onScratch = () => scheduleScratchPadSave();
+  soql?.addEventListener("input", onScratch);
+  apex?.addEventListener("input", onScratch);
+}
+
+async function refreshWorkbench() {
+  const orgKey = currentOrgKey();
+  try {
+    state.sessionActivity = await listActivity(orgKey);
+  } catch {
+    state.sessionActivity = [];
+  }
+  try {
+    state.scratchPad = await getScratchPad(orgKey);
+  } catch {
+    state.scratchPad = { soql: "", apex: "" };
+  }
+  const soqlEl = $("#wbScratchSoql");
+  const apexEl = $("#wbScratchApex");
+  if (soqlEl && document.activeElement !== soqlEl) soqlEl.value = state.scratchPad.soql || "";
+  if (apexEl && document.activeElement !== apexEl) apexEl.value = state.scratchPad.apex || "";
+  renderWorkbenchContinue();
+  renderWorkbenchPinned();
+}
+
+function scheduleScratchPadSave() {
+  if (state.scratchSaveTimer) clearTimeout(state.scratchSaveTimer);
+  state.scratchSaveTimer = setTimeout(() => {
+    persistScratchPadNow().catch(() => {});
+  }, 350);
+}
+
+async function persistScratchPadNow() {
+  if (state.scratchSaveTimer) {
+    clearTimeout(state.scratchSaveTimer);
+    state.scratchSaveTimer = null;
+  }
+  const soql = $("#wbScratchSoql")?.value || "";
+  const apex = $("#wbScratchApex")?.value || "";
+  state.scratchPad = { soql, apex };
+  await saveScratchPad(currentOrgKey(), state.scratchPad);
+  const hint = $("#wbScratchHint");
+  if (hint) hint.textContent = "Saved for this org";
+}
+
+async function trackActivity(entry) {
+  try {
+    state.sessionActivity = await recordActivity(currentOrgKey(), entry);
+    if ($("#view-home")?.classList.contains("active")) {
+      renderWorkbenchContinue();
+    }
+  } catch {
+    /* non-blocking */
+  }
+}
+
+function renderWorkbenchContinue() {
+  const root = $("#wbContinue");
+  if (!root) return;
+  root.replaceChildren();
+  const rows = state.sessionActivity || [];
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "wb-empty";
+    empty.textContent = "Nothing yet — run SOQL, Apex, describe, or open metadata to fill this list.";
+    root.appendChild(empty);
+    return;
+  }
+  for (const row of rows.slice(0, 8)) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "wb-item";
+    btn.innerHTML = `
+      <span class="wb-item-top">
+        <span class="wb-tag">${escapeHtml(activityTypeLabel(row.type))}</span>
+        <span class="wb-item-title">${escapeHtml(row.title || "Activity")}</span>
+        <span class="wb-item-time">${escapeHtml(formatActivityTime(row.at))}</span>
+      </span>
+      ${row.detail ? `<span class="wb-item-detail">${escapeHtml(row.detail)}</span>` : ""}`;
+    btn.addEventListener("click", () => resumeActivity(row));
+    root.appendChild(btn);
+  }
+}
+
+function renderWorkbenchPinned() {
+  const root = $("#wbPinned");
+  if (!root) return;
+  root.replaceChildren();
+  const pinned = (state.soqlLibrary || []).filter((r) => r.pinned).slice(0, 8);
+  if (!pinned.length) {
+    const empty = document.createElement("div");
+    empty.className = "wb-empty";
+    empty.textContent = "Pin queries in the SOQL library to see them here.";
+    root.appendChild(empty);
+    return;
+  }
+  for (const row of pinned) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "wb-item";
+    const preview = row.soql.length > 100 ? `${row.soql.slice(0, 97)}…` : row.soql;
+    btn.innerHTML = `
+      <span class="wb-item-top">
+        <span class="wb-tag">${row.apiMode === "tooling" ? "Tooling" : "SOQL"}</span>
+        <span class="wb-item-title">${escapeHtml(row.name)}</span>
+      </span>
+      <span class="wb-item-detail">${escapeHtml(preview)}</span>`;
+    btn.addEventListener("click", () => {
+      $("#soqlApiMode").value = row.apiMode === "tooling" ? "tooling" : "rest";
+      $("#soqlInput").value = row.soql;
+      $("#soqlSaveName").value = row.name;
+      state.editingSoqlId = row.id;
+      showView("soql-run");
+    });
+    root.appendChild(btn);
+  }
+}
+
+function resumeActivity(row) {
+  const payload = row.payload || {};
+  if (row.type === "soql" || row.view === "soql-run") {
+    if (payload.apiMode) $("#soqlApiMode").value = payload.apiMode === "tooling" ? "tooling" : "rest";
+    if (payload.soql) $("#soqlInput").value = payload.soql;
+    showView("soql-run");
+    return;
+  }
+  if (row.type === "apex" || row.view === "anon-apex") {
+    if (payload.apex) $("#anonApexInput").value = payload.apex;
+    showView("anon-apex");
+    return;
+  }
+  if (row.type === "describe" || row.view === "describe") {
+    if (payload.sobject) $("#describeObjectSearch").value = payload.sobject;
+    showView("describe");
+    if (payload.sobject) onLoadDescribe().catch(() => {});
+    return;
+  }
+  if (row.type === "meta" || row.view === "meta-open") {
+    if (payload.query != null) $("#metaQuery").value = payload.query;
+    if (payload.typeId) $("#metaType").value = payload.typeId;
+    showView("meta-open");
+    return;
+  }
+  if (row.view && TITLES[row.view]) showView(row.view);
 }
 
 function bindFeatureActions() {
@@ -812,6 +992,7 @@ async function refreshOrg() {
   state.session = res.result.session;
   setOrgBanner(state.org, state.session);
   await refreshSoqlLibrary();
+  await refreshWorkbench();
 }
 
 function currentOrgKey() {
@@ -849,6 +1030,7 @@ async function refreshSoqlLibrary() {
 }
 
 function renderSoqlLibrary() {
+  renderWorkbenchPinned();
   const root = $("#soqlLibraryList");
   const hint = $("#soqlLibraryHint");
   if (!root) return;
@@ -961,10 +1143,11 @@ async function onRunAnonApex() {
   const debug = $("#anonApexDebug");
   box.innerHTML = `<div class="summary-bar">Executing…</div>`;
   debug.textContent = "";
+  const apex = $("#anonApexInput").value;
   try {
     const res = await send("executeAnonymous", {
       tabUrl: await requireTabUrl(),
-      apex: $("#anonApexInput").value,
+      apex,
       apiVersion: apiVersion()
     });
     if (!res.ok) throw new Error(res.error);
@@ -977,6 +1160,13 @@ async function onRunAnonApex() {
     <div class="finding info"><strong>Raw</strong><pre class="inline-pre">${escapeHtml(
       JSON.stringify(res.result, null, 2)
     )}</pre></div>`;
+    await trackActivity({
+      type: "apex",
+      title: summary.ok ? "Anonymous Apex" : "Anonymous Apex (failed)",
+      detail: String(apex).replace(/\s+/g, " ").trim(),
+      view: "anon-apex",
+      payload: { apex }
+    });
   } catch (e) {
     box.innerHTML = `<div class="finding high"><span class="tag">error</span><strong>${escapeHtml(
       e.message
@@ -1606,6 +1796,13 @@ async function onLoadDescribe() {
     $("#describeSummary").textContent = `${res.result.name}${customBit} · ${fields.length} fields · keyPrefix ${res.result.keyPrefix || "—"}`;
     renderDescribeFields();
     renderDependentPicker(fields);
+    await trackActivity({
+      type: "describe",
+      title: res.result.name,
+      detail: `${fields.length} fields${res.result.custom ? " · custom" : ""}`,
+      view: "describe",
+      payload: { sobject: res.result.name }
+    });
   } catch (e) {
     $("#describeSummary").textContent = e.message;
   }
@@ -1820,6 +2017,13 @@ async function onSearchMeta() {
         const base = lightningBaseFromOrg(state.org) || state.org?.origin;
         const url = h.openPath.startsWith("http") ? h.openPath : `${base}${h.openPath}`;
         await chrome.tabs.create({ url });
+        await trackActivity({
+          type: "meta",
+          title: `${h.typeLabel} · ${h.name}`,
+          detail: query || h.name,
+          view: "meta-open",
+          payload: { query, typeId: typeId || "", name: h.name }
+        });
       });
     });
   } catch (e) {
@@ -2068,13 +2272,22 @@ async function runSoqlManual() {
   try {
     await ensureSalesforceSiteAccess();
     const tooling = soqlApiMode() === "tooling";
+    const query = $("#soqlInput").value;
     const res = await send(tooling ? "toolingQuery" : "runSoql", {
       tabUrl: await requireTabUrl(),
-      query: $("#soqlInput").value,
+      query,
       apiVersion: apiVersion()
     });
     if (!res.ok) throw new Error(res.error);
-    renderQueryResult(panel, status, "soql", res.result, $("#soqlInput").value);
+    renderQueryResult(panel, status, "soql", res.result, query);
+    const from = String(query).match(/\bFROM\s+([A-Za-z][A-Za-z0-9_]*)/i)?.[1] || "Query";
+    await trackActivity({
+      type: "soql",
+      title: tooling ? `Tooling · ${from}` : from,
+      detail: String(query).replace(/\s+/g, " ").trim(),
+      view: "soql-run",
+      payload: { soql: query, apiMode: tooling ? "tooling" : "rest" }
+    });
   } catch (e) {
     clearQueryResult(panel, status, "soql", e.message, "error");
   }

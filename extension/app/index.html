@@ -25,25 +25,77 @@
     <div id="orgMeta" class="org-meta"></div>
   </section>
 
-  <!-- HOME HUB -->
+  <!-- SESSION WORKBENCH (home) -->
   <section id="view-home" class="view active">
-    <p class="lede">Developer assistants for day-to-day Salesforce work.</p>
-    <div class="feature-grid" id="featureGrid"></div>
-    <div class="extras">
-      <div class="label" style="margin-top:0">Quick links &amp; utilities</div>
-      <div class="util-row">
-        <button type="button" class="btn" data-open="links">Setup links</button>
-        <button type="button" class="btn" data-open="soql-run">SOQL runner</button>
-        <button type="button" class="btn" data-open="anon-apex">Anonymous Apex</button>
-        <button type="button" class="btn" data-open="ids">ID tools</button>
-        <button type="button" class="btn" data-open="favs">Favorites</button>
+    <p class="lede">Session Workbench — pick up where you left off in this org.</p>
+
+    <div class="wb-launch" id="wbLaunch">
+      <button type="button" class="btn primary" data-open="soql-run">SOQL</button>
+      <button type="button" class="btn" data-open="anon-apex">Anon Apex</button>
+      <button type="button" class="btn" data-open="describe">Describe</button>
+      <button type="button" class="btn" data-open="meta-open">Metadata</button>
+      <button type="button" class="btn" data-open="logs">Debug logs</button>
+      <button type="button" class="btn" data-open="ids">Record / ID</button>
+    </div>
+
+    <div class="wb-grid">
+      <div class="wb-card">
+        <div class="wb-card-head">
+          <h3>Continue</h3>
+          <button type="button" class="linkish" id="wbClearContinue" title="Clear continue list">Clear</button>
+        </div>
+        <p class="hint wb-hint">Recent SOQL, Apex, describe, and metadata actions for this org (local only).</p>
+        <div id="wbContinue" class="wb-list"></div>
+      </div>
+      <div class="wb-card">
+        <div class="wb-card-head">
+          <h3>Pinned for this org</h3>
+          <button type="button" class="linkish" data-open="soql-run">Library</button>
+        </div>
+        <p class="hint wb-hint">Pinned queries from your SOQL library.</p>
+        <div id="wbPinned" class="wb-list"></div>
       </div>
     </div>
+
+    <div class="wb-card wb-scratch">
+      <div class="wb-card-head">
+        <h3>Scratch pad</h3>
+        <span class="hint" id="wbScratchHint">Saved per org in this browser</span>
+      </div>
+      <div class="wb-scratch-grid">
+        <div>
+          <label class="label" for="wbScratchSoql">SOQL</label>
+          <textarea id="wbScratchSoql" class="textarea" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 10" spellcheck="false"></textarea>
+          <button type="button" class="btn" id="wbOpenScratchSoql">Open in SOQL Runner</button>
+        </div>
+        <div>
+          <label class="label" for="wbScratchApex">Anonymous Apex</label>
+          <textarea id="wbScratchApex" class="textarea" rows="4" placeholder="System.debug('hello');" spellcheck="false"></textarea>
+          <button type="button" class="btn" id="wbOpenScratchApex">Open in Anon Apex</button>
+        </div>
+      </div>
+    </div>
+
+    <details class="wb-tools" id="wbAllTools">
+      <summary>All tools</summary>
+      <div class="feature-grid" id="featureGrid"></div>
+      <div class="extras">
+        <div class="label" style="margin-top:0">Quick links &amp; utilities</div>
+        <div class="util-row">
+          <button type="button" class="btn" data-open="links">Setup links</button>
+          <button type="button" class="btn" data-open="soql-run">SOQL runner</button>
+          <button type="button" class="btn" data-open="anon-apex">Anonymous Apex</button>
+          <button type="button" class="btn" data-open="ids">ID tools</button>
+          <button type="button" class="btn" data-open="favs">Favorites</button>
+        </div>
+      </div>
+    </details>
+
     <div class="trust-card">
       <strong>Privacy &amp; data access</strong>
       <ul>
         <li>Uses your open Salesforce tab session in the browser only — OrgKit does not upload your <code>sid</code>.</li>
-        <li>What you can query or edit is whatever Salesforce allows for your user (profile, permission sets, object/field access).</li>
+        <li>Workbench history and scratch pad stay in local browser storage for this org key.</li>
         <li>Deletes and saves ask for confirmation before changing org data.</li>
       </ul>
       <p class="trust-links">

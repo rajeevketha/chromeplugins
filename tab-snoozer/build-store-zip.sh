@@ -47,7 +47,7 @@ if [[ -d "$ROOT/store" ]]; then
 fi
 
 python3 - <<PY
-import json, zipfile, os
+import json, zipfile, os, time
 art = "${ARTIFACTS}"
 ver = "${VERSION}"
 path = os.path.join(art, f"TabSnoozer-{ver}-store.zip")
@@ -57,11 +57,35 @@ assert "manifest.json" in names, "manifest.json must be at zip root"
 assert "store/" not in names and not any(n.startswith("store/") for n in names)
 m = json.loads(z.read("manifest.json"))
 assert m["version"] == ver
+
+# Pointer files so Files/UI always has an obvious "latest" entry.
+latest = os.path.join(art, "TabSnoozer-LATEST.txt")
+with open(latest, "w", encoding="utf-8") as fh:
+    fh.write(
+        f"version={ver}\n"
+        f"store_zip=TabSnoozer-{ver}-store.zip\n"
+        f"store_path={path}\n"
+        f"assets_zip=TabSnoozer-{ver}-cws-assets.zip\n"
+        f"built_at={time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n"
+    )
+# Stable copies for picky Files browsers
+for alias in ("TabSnoozer-CURRENT-store.zip", f"tabsnoozer-{ver}-store.zip"):
+    alias_path = os.path.join(art, alias)
+    with open(path, "rb") as src, open(alias_path, "wb") as dst:
+        dst.write(src.read())
+    with open(os.path.join(art, "assets", alias), "wb") as dst:
+        with open(path, "rb") as src:
+            dst.write(src.read())
+
 print(f"OK store package: {path}")
 print(f"OK version {m['version']} · {len(names)} files · permissions={m.get('permissions')}")
+print(f"OK latest pointer: {latest}")
 print("Files section zips:")
 for n in sorted(os.listdir(art)):
-    if n.lower().endswith(".zip") and "snooze" in n.lower():
+    lower = n.lower()
+    if ("snooze" in lower or n.startswith("TabSnoozer") or n.startswith("tabsnoozer")) and (
+        lower.endswith(".zip") or n.endswith(".txt")
+    ):
         p = os.path.join(art, n)
         print(f"  - {n} ({os.path.getsize(p)} bytes)")
 PY

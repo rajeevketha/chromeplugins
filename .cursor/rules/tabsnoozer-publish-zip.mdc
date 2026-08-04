@@ -1,0 +1,31 @@
+---
+description: Always publish Tab Snoozer store zip to Files after any tab-snoozer change
+alwaysApply: true
+---
+
+# Tab Snoozer → Files (required)
+
+After **any** change under `tab-snoozer/` (code, store docs, manifest, or packaging), you MUST publish the store zip to Cursor Files before ending the turn.
+
+## Required command
+
+```bash
+./tab-snoozer/build-store-zip.sh
+```
+
+## Required outcomes (verify with `ls`)
+
+These must exist under `/opt/cursor/artifacts/`:
+
+- `TabSnoozer-<version>-store.zip` (version from `tab-snoozer/manifest.json`)
+- `TabSnoozer-store.zip` (stable alias)
+- `TabSnoozer.zip` (stable alias)
+- `TabSnoozer-LATEST.txt` (points at the current versioned store zip)
+
+If the user asks for the zip / Files / store package, run the script even when no code changed.
+
+## Response requirement
+
+When packaging mattered this turn, include a direct Files link to the versioned store zip, e.g. `[TabSnoozer-1.8.3-store.zip](/opt/cursor/artifacts/TabSnoozer-1.8.3-store.zip)`.
+
+Do not say the zip is ready unless `ls` confirms the file exists in `/opt/cursor/artifacts/`.

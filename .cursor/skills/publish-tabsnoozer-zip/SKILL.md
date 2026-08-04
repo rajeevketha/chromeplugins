@@ -1,15 +1,13 @@
 ---
 name: publish-tabsnoozer-zip
-description: Build and publish Tab Snoozer Chrome Web Store zip into Cursor Files (/opt/cursor/artifacts). Use whenever tab-snoozer changes, or when the user asks for the zip, store package, or Files download.
+description: Build Tab Snoozer Chrome Web Store zip into Cursor Files and commit it under tab-snoozer/releases for a working GitHub download. Use whenever tab-snoozer changes, or when the user asks for the zip, store package, or Files download.
 ---
 
-# Publish Tab Snoozer zip to Files
+# Publish Tab Snoozer zip
 
-## When to use
+## Why this skill exists
 
-- Any edit under `tab-snoozer/`
-- User asks for the zip / store package / Files section download
-- End of a turn that touched packaging, UI, or extension logic
+Cursor Files uploads `.zip` artifacts, but the Files UI often does **not** give a working download for non-previewable files. Users need a GitHub path.
 
 ## Steps
 
@@ -19,16 +17,24 @@ description: Build and publish Tab Snoozer Chrome Web Store zip into Cursor File
 ./tab-snoozer/build-store-zip.sh
 ```
 
-2. Confirm with:
+2. Confirm artifacts:
 
 ```bash
-ls -la /opt/cursor/artifacts/TabSnoozer-*-store.zip /opt/cursor/artifacts/TabSnoozer-LATEST.txt
+ls -la /opt/cursor/artifacts/TabSnoozer-*-store.zip \
+  /opt/cursor/artifacts/TabSnoozer-store-package.zip \
+  tab-snoozer/releases/TabSnoozer-*-store.zip
 ```
 
-3. Tell the user the exact versioned filename and link it from `/opt/cursor/artifacts/`.
+3. Force-add releases if needed, then commit + push:
 
-## Notes
+```bash
+git add -f tab-snoozer/releases/*.zip tab-snoozer/releases/README.md
+git commit -m "Publish Tab Snoozer store zip to releases/"
+git push -u origin HEAD
+```
 
-- Store zip has `manifest.json` at the zip root (no nested folder).
-- Listing assets zip is also published as `TabSnoozer-<version>-cws-assets.zip`.
-- Do not finish without the artifacts existing on disk.
+4. Tell the user the **GitHub download** URL:
+
+`https://github.com/rajeevketha/chromeplugins/raw/<branch>/tab-snoozer/releases/TabSnoozer-<version>-store.zip`
+
+Do not promise that a markdown `/opt/cursor/artifacts/...` link will download.

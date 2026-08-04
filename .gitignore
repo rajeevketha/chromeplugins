@@ -10,3 +10,8 @@ OrgKit/
 *.zip
 orgkit-*.zip
 sf-dev-toolkit-*.zip
+
+# Exception: Tab Snoozer store packages must be downloadable from GitHub
+# because Cursor Files does not reliably expose .zip downloads.
+!tab-snoozer/releases/
+!tab-snoozer/releases/**/*.zip

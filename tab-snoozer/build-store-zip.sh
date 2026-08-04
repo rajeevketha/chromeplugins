@@ -20,11 +20,15 @@ cp "$ROOT/manifest.json" "$ROOT/background.js" "$ROOT/README.md" "$STAGE/"
 cp -R "$ROOT/popup" "$ROOT/content" "$ROOT/icons" "$STAGE/"
 [[ -d "$ROOT/ready" ]] && cp -R "$ROOT/ready" "$STAGE/"
 
+RELEASES="$ROOT/releases"
+mkdir -p "$RELEASES"
+
 STORE_NAMES=(
   "TabSnoozer-${VERSION}-store.zip"
   "TabSnoozer-store.zip"
   "TabSnoozer.zip"
-  "TabSnoozer-1.8.0-store.zip"
+  "TabSnoozer-store-package.zip"
+  "TabSnoozer-CURRENT-store.zip"
 )
 
 for name in "${STORE_NAMES[@]}"; do
@@ -33,7 +37,12 @@ for name in "${STORE_NAMES[@]}"; do
   (cd "$STAGE" && zip -qr "$out" .)
   cp -f "$out" "$ARTIFACTS/assets/$name"
   cp -f "$out" "$ROOT/dist/$name"
+  # Repo path users can download when Cursor Files zip UX fails
+  cp -f "$out" "$RELEASES/$name"
 done
+
+# Canonical versioned name always present in releases/
+cp -f "$ARTIFACTS/TabSnoozer-${VERSION}-store.zip" "$RELEASES/TabSnoozer-${VERSION}-store.zip"
 
 # Listing / screenshot assets pack for the Developer Dashboard.
 if [[ -d "$ROOT/store" ]]; then
@@ -66,10 +75,11 @@ with open(latest, "w", encoding="utf-8") as fh:
         f"store_zip=TabSnoozer-{ver}-store.zip\n"
         f"store_path={path}\n"
         f"assets_zip=TabSnoozer-{ver}-cws-assets.zip\n"
+        f"repo_release=tab-snoozer/releases/TabSnoozer-{ver}-store.zip\n"
         f"built_at={time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n"
     )
 # Stable copies for picky Files browsers
-for alias in ("TabSnoozer-CURRENT-store.zip", f"tabsnoozer-{ver}-store.zip"):
+for alias in ("TabSnoozer-CURRENT-store.zip", f"tabsnoozer-{ver}-store.zip", "TabSnoozer-store-package.zip"):
     alias_path = os.path.join(art, alias)
     with open(path, "rb") as src, open(alias_path, "wb") as dst:
         dst.write(src.read())
@@ -77,9 +87,13 @@ for alias in ("TabSnoozer-CURRENT-store.zip", f"tabsnoozer-{ver}-store.zip"):
         with open(path, "rb") as src:
             dst.write(src.read())
 
+rel = os.path.join("${RELEASES}", f"TabSnoozer-{ver}-store.zip")
+assert os.path.isfile(rel), f"missing repo release zip: {rel}"
+
 print(f"OK store package: {path}")
 print(f"OK version {m['version']} · {len(names)} files · permissions={m.get('permissions')}")
 print(f"OK latest pointer: {latest}")
+print(f"OK repo download: {rel}")
 print("Files section zips:")
 for n in sorted(os.listdir(art)):
     lower = n.lower()

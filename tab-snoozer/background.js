@@ -162,7 +162,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
       if (message?.type === "getSnoozed") {
@@ -170,7 +170,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return;
       }
       if (message?.type === "snoozeActive") {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        // Prefer the sender tab (on-page side launcher).
+        let tab = sender.tab;
+        if (!tab?.id) {
+          [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        }
         const entry = await snoozeTab(tab, message.preset);
         sendResponse({ ok: true, entry });
         return;

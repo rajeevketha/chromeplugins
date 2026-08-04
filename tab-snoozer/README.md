@@ -5,6 +5,8 @@ Tiny Chrome extension: snooze a tab for later and get it back when you asked.
 ## What it does
 
 - Snooze the current tab for **1 hour**, **Tonight (8:00 PM)**, or **Tomorrow morning (9:00 AM)**
+- On-page **Snooze** side tab on websites (hides / show toggle)
+- Side tab scans the right edge for other fixed extension tabs, then moves to a free slot (and rechecks if another extension injects later)
 - Tab closes and is saved locally
 - At wake time: notification + tab reopens
 - View, open early, or cancel from the popup

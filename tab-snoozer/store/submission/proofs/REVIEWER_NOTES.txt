@@ -1,0 +1,18 @@
+Tab Snoozer — notes for Chrome Web Store reviewers (v1.8.1)
+
+How to test quickly
+1. Load the uploaded package.
+2. Open any https page (e.g. example.com).
+3. Click the toolbar icon → snooze 1m (or use the side Snooze tab).
+4. Stay on another https page.
+5. When due: Chrome notification + floating toast on the active page.
+6. Open the toolbar popup → Snoozed tabs list → Remove / Open / Clear all.
+
+Expected non-behaviors
+- Does not open the extension UI as a normal browser tab that replaces the user’s work.
+- Does not snooze chrome://, chrome-extension://, or file:// pages.
+- Does not send snoozed URLs to a remote server.
+- Side tab shifts vertically to avoid overlapping other right-edge extension tabs.
+
+Privacy policy
+https://rajeevketha.github.io/chromeplugins/tab-snoozer/privacy.html

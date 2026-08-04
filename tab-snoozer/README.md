@@ -22,11 +22,25 @@ Tiny Chrome extension: snooze a tab for later and get it back when you asked.
 3. Enable **Developer mode** → **Load unpacked** → this folder
 4. Pin the icon and use it on a normal http(s) page
 
+## Chrome Web Store
+
+```bash
+./build-store-zip.sh
+```
+
+Publishes to Files:
+
+- `TabSnoozer-1.8.1-store.zip` — upload package (manifest at root)
+- `TabSnoozer-1.8.1-cws-assets.zip` — listing copy, screenshots, promo
+
+Follow [`store/submission/SUBMIT_CHECKLIST.md`](store/submission/SUBMIT_CHECKLIST.md).
+
 ## Notes
 
 - Local only — no accounts, sync, or tracking
 - Only `http://` / `https://` pages can be snoozed
 - Allow Chrome notifications so due reminders are visible
+- Privacy: [`privacy.html`](privacy.html)
 
 ## License
 

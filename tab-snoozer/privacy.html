@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tab Snoozer Privacy</title>
+    <style>
+      :root { --ink: #142328; --muted: #5c6f76; --teal: #1a5f6e; }
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Nunito Sans", "Trebuchet MS", sans-serif;
+        color: var(--ink);
+        line-height: 1.5;
+        background: linear-gradient(165deg, #f7fbfb, #eef5f6 50%, #f6f1ea);
+      }
+      main { max-width: 40rem; margin: 0 auto; padding: 2.5rem 1.25rem 3rem; }
+      h1 {
+        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        font-weight: 600;
+      }
+      h2 { margin-top: 1.75rem; font-size: 1.05rem; color: var(--teal); }
+      .muted { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Tab Snoozer Privacy</h1>
+      <p class="muted">Last updated: August 4, 2026 · Version 1.8.1</p>
+      <p>
+        Tab Snoozer is a local Chrome extension. It helps you park a tab and open it
+        again later. It is designed to collect as little as possible.
+      </p>
+      <h2>What is stored</h2>
+      <p>When you snooze a tab, Tab Snoozer saves on your device:</p>
+      <ul>
+        <li>Page URL</li>
+        <li>Page title</li>
+        <li>Wake time and when you snoozed it</li>
+        <li>Simple settings (auto-open, show page side tab)</li>
+      </ul>
+      <p>This data is stored with <code>chrome.storage.local</code> in your browser profile.</p>
+      <h2>What is not collected</h2>
+      <ul>
+        <li>No accounts or sign-in</li>
+        <li>No cookies or passwords</li>
+        <li>No page content scraping</li>
+        <li>No browsing history API access</li>
+        <li>No analytics, ads, or remote servers</li>
+        <li>Nothing is uploaded from your machine by this extension</li>
+      </ul>
+      <h2>Permissions</h2>
+      <ul>
+        <li><strong>tabs</strong> — read the active tab’s URL/title, close it, and reopen it later</li>
+        <li><strong>storage</strong> — keep your snoozed list and settings on this device</li>
+        <li><strong>alarms</strong> — wake snoozed tabs at the chosen time</li>
+        <li><strong>notifications</strong> — remind you when a snoozed tab is due</li>
+        <li><strong>scripting</strong> — show the in-page reminder toast on the site you are viewing</li>
+        <li><strong>http(s) host access</strong> — on-page Snooze side tab and ready toast only; no page content collection</li>
+      </ul>
+      <h2>Limits</h2>
+      <ul>
+        <li>Only <code>http://</code> and <code>https://</code> pages can be snoozed</li>
+        <li>Internal Chrome pages and local files are blocked</li>
+      </ul>
+      <h2>Your control</h2>
+      <p>
+        You can open, remove, or clear snoozed tabs from the popup. Removing the
+        extension deletes its local storage.
+      </p>
+    </main>
+  </body>
+</html>
